@@ -1,5 +1,11 @@
 # Ignore datasets folder
 datasets/
+src/STL/
+eval_results/
+logs/
 
 # Ignore any file inside datasets folder
 datasets/*
+src/STL/*
+eval_results/*
+logs/*
