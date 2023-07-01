@@ -95,9 +95,9 @@ def print_metrics(logger, summary_metrics: Dict, losses_by_iteration: List = Non
                   title: str = 'Metrics'):
     """Prints out formated metrics to logger"""
 
-
     if losses_by_iteration is not None:
         losses_all_str = ' | '.join(['{:.5f}'.format(c) for c in losses_by_iteration])
+
 
 def generate_data(source):
     rot_mag = np.random.uniform(0, 45)
@@ -106,7 +106,7 @@ def generate_data(source):
     partial_p_keep = [1, np.random.uniform(0.5, 1)]
     sample = {'points': np.concatenate((np.asarray(source.points), np.asarray(source.normals)), axis=1), 'label': 'Actual', 'idx': 4, 'category': 'person'}
 
-    transforms =  torchvision.transforms.Compose([Transforms.SetDeterministic(),
+    transforms = torchvision.transforms.Compose([Transforms.SetDeterministic(),
                                 Transforms.SplitSourceRef(),
                                 Transforms.RandomCrop(partial_p_keep),
                                 Transforms.RandomTransformSE3_euler(rot_mag=rot_mag, trans_mag=trans_mag),
@@ -114,11 +114,10 @@ def generate_data(source):
                                 Transforms.RandomJitter(),
                                 Transforms.ShufflePoints()])
 
-
-    # # pred_transforms = pred_transforms
     data_batch = transforms(sample)
 
     return data_batch
+
 
 def get_source():
     mesh = o3.io.read_triangle_mesh('STL/Segmentation.stl')
@@ -168,6 +167,7 @@ def get_source():
     source.estimate_normals()
 
     return source
+
 
 def inference(data_loader, model: torch.nn.Module):
     """Runs inference over entire dataset
@@ -265,7 +265,7 @@ def inference(data_loader, model: torch.nn.Module):
         rpm_icp_stats.append({data_batch['category'][0] : rpmnet_icp})
 
         draw_registration_result(source, target, result, result_gt, result_rpm_icp, vis1, vis2)
- 
+
     results = {'RPMNet': rpm_stats, 'RPMNet_ICP': rpm_icp_stats}
     with open('results/results_noisy_partial_0.8_t_4_updated.json', 'w') as fp:
         json.dump(results, fp)
@@ -289,7 +289,7 @@ def draw_registration_result(source, target, result, result_gt, result_rpm_icp, 
     vis2.add_geometry(result_gt)
     vis2.add_geometry(source)
     vis2.add_geometry(target)
- 
+
     count = 0
     while count < 1000:
         vis1.update_geometry(result)
@@ -390,7 +390,6 @@ def save_eval_data(pred_transforms, endpoints, metrics, summary_metrics, save_pa
         json.dump(summary_metrics_float, json_out)
 
 
-
 def get_model():
     if _args.method == 'rpmnet':
         assert _args.resume is not None
@@ -404,7 +403,6 @@ def get_model():
 
 
 def main():
-    # Load data_loader
     test_dataset = get_test_datasets(_args)
     test_loader = torch.utils.data.DataLoader(test_dataset,
                                               batch_size=1, shuffle=True)
@@ -414,14 +412,7 @@ def main():
         endpoints = {}
     else:
         model = get_model()
-        pred_transforms, endpoints = inference(test_loader, model)  # Feedforward transforms
-
-    # Compute evaluation matrices
-    # eval_metrics, summary_metrics = evaluate(pred_transforms, data_loader=test_loader)
-
-    # save_eval_data(pred_transforms, endpoints, eval_metrics, summary_metrics, _args.eval_save_path)
-    # _logger.info('Finished')
-
+        pred_transforms, endpoints = inference(test_loader, model)
 
 if __name__ == '__main__':
     # Arguments and logging
