@@ -62,7 +62,6 @@ class ParameterPredictionNet(nn.Module):
             nn.Linear(256, 2 + np.prod(weights_dim)),
         )
 
-        self._logger.info('Predicting weights with dim {}.'.format(self.weights_dim))
 
     def forward(self, x):
         """ Returns alpha, beta, and gating_weights (if needed)
@@ -102,7 +101,6 @@ class ParameterPredictionNetConstant(nn.Module):
         self.anneal_weights = nn.Parameter(torch.zeros(2 + np.prod(weights_dim)))
         self.weights_dim = weights_dim
 
-        self._logger.info('Predicting weights with dim {}.'.format(self.weights_dim))
 
     def forward(self, x):
         """Returns beta, gating_weights"""
@@ -158,12 +156,10 @@ class FeatExtractionEarlyFusion(nn.Module):
         super().__init__()
 
         self._logger = logging.getLogger(self.__class__.__name__)
-        self._logger.info('Using early fusion, feature dim = {}'.format(feature_dim))
         self.radius = radius
         self.n_sample = num_neighbors
 
         self.features = sorted(features, key=lambda f: _raw_features_order[f])
-        self._logger.info('Feature extraction using features {}'.format(', '.join(self.features)))
 
         # Layers
         raw_dim = np.sum([_raw_features_sizes[f] for f in self.features])  # number of channels after concat

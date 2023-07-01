@@ -18,7 +18,8 @@ class SplitSourceRef:
         sample['points_raw'] = sample.pop('points')
         if isinstance(sample['points_raw'], torch.Tensor):
             sample['points_src'] = sample['points_raw'].detach()
-            sample['points_ref'] = sample['points_raw'].detach()
+            sample['points_ref'] = sample['points_raw'].detach() 
+            ## add random points to the reference point cloud
         else:  # is numpy
             sample['points_src'] = sample['points_raw'].copy()
             sample['points_ref'] = sample['points_raw'].copy()
@@ -191,9 +192,9 @@ class RandomTransformSE3:
 
         # Generate rotation
         rand_rot = special_ortho_group.rvs(3)
-        axis_angle = Rotation.as_rotvec(Rotation.from_dcm(rand_rot))
+        axis_angle = Rotation.as_rotvec(Rotation.from_matrix(rand_rot))
         axis_angle *= rot_mag / 180.0
-        rand_rot = Rotation.from_rotvec(axis_angle).as_dcm()
+        rand_rot = Rotation.from_rotvec(axis_angle).as_matrix()
 
         # Generate translation
         rand_trans = np.random.uniform(-trans_mag, trans_mag, 3)
@@ -284,7 +285,7 @@ class RandomRotatorZ(RandomTransformSE3):
         """Generate a random SE3 transformation (3, 4) """
 
         rand_rot_deg = np.random.random() * self._rot_mag
-        rand_rot = Rotation.from_euler('z', rand_rot_deg, degrees=True).as_dcm()
+        rand_rot = Rotation.from_euler('z', rand_rot_deg, degrees=True).as_matrix()
         rand_SE3 = np.pad(rand_rot, ((0, 0), (0, 1)), mode='constant').astype(np.float32)
 
         return rand_SE3
@@ -298,6 +299,27 @@ class ShufflePoints:
         else:
             sample['points_ref'] = np.random.permutation(sample['points_ref'])
             sample['points_src'] = np.random.permutation(sample['points_src'])
+
+        # sphere0 = uniform_2_sphere(100, 0.5, [0,0,0])
+        # sphere = uniform_2_sphere(100, 0.5, [1,1,1])
+        # sphere1 = uniform_2_sphere(100, 0.5, [-1,-1,-1])
+        # sphere2 = uniform_2_sphere(100, 0.5, [1,-1,1])
+        # sphere3 = uniform_2_sphere(100, 0.5, [-1,1,-1])
+        # sphere4 = uniform_2_sphere(100, 0.5, [1,1,-1])
+
+        # sphere = np.concatenate((sphere0, sphere, sphere1, sphere2, sphere3, sphere4), axis=0)
+
+        # random number of spheres between 0 and 10
+
+        num_spheres = np.random.randint(0, 10)
+        sphere = np.zeros((0, 3))
+
+        for i in range(num_spheres):
+            sphere = np.concatenate((sphere, uniform_2_sphere(100, 0.5, np.random.uniform(-1, 1, 3))), axis=0)
+
+        sphere = np.concatenate((sphere, sphere[:, :3]), axis=1)
+        sphere = sphere.astype(sample['points_ref'].dtype)
+        sample['points_ref'] = np.concatenate((sample['points_ref'], sphere), axis=0)
         return sample
 
 
@@ -322,8 +344,8 @@ class Dict2DcpList:
         rotation_ba = sample['transform_gt'][:3, :3].copy()
         translation_ba = sample['transform_gt'][:3, 3].copy()
 
-        euler_ab = Rotation.from_dcm(rotation_ab).as_euler('zyx').copy()
-        euler_ba = Rotation.from_dcm(rotation_ba).as_euler('xyz').copy()
+        euler_ab = Rotation.from_matrix(rotation_ab).as_euler('zyx').copy()
+        euler_ba = Rotation.from_matrix(rotation_ba).as_euler('xyz').copy()
 
         return src, target, \
                rotation_ab, translation_ab, rotation_ba, translation_ba, \

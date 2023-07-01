@@ -61,11 +61,11 @@ class CheckPointManager(object):
 
     def _save_checkpoint(self, step, model, optimizer, score):
         save_name = self._save_path.format(step)
+        print(save_name)
         state = {'state_dict': model.state_dict(),
                  'optimizer': optimizer.state_dict(),
                  'step': step}
         torch.save(state, save_name)
-        self._logger.info('Saved checkpoint: {}'.format(save_name))
 
         self._checkpoints_buffer.append((save_name, time.time()))
 
@@ -74,7 +74,6 @@ class CheckPointManager(object):
             shutil.copyfile(save_name, best_save_name)
             self._best_score = score
             self._best_step = step
-            self._logger.info('Checkpoint is current best, score={:.3g}'.format(self._best_score))
 
     def _remove_old_checkpoints(self):
         while len(self._checkpoints_buffer) > self._max_to_keep:
@@ -119,7 +118,7 @@ class CheckPointManager(object):
         if os.path.isdir(save_path):
             save_path = os.path.join(save_path, 'model-best.pth')
 
-        state = torch.load(save_path)
+        state = torch.load(save_path, map_location=torch.device('cpu'))
 
         step = 0
         if 'step' in state:
@@ -131,7 +130,6 @@ class CheckPointManager(object):
         if 'optimizer' in state and optimizer is not None:
             optimizer.load_state_dict(state['optimizer'])
 
-        self._logger.info('Loaded models from {}'.format(save_path))
         return step
 
 
@@ -144,6 +142,5 @@ class TorchDebugger(torch.autograd.detect_anomaly):
         super().__exit__()
         if isinstance(value, RuntimeError):
             traceback.print_tb(trace)
-            print(value)
             if sys.gettrace() is None:
                 pdb.set_trace()

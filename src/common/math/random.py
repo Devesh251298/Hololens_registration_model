@@ -2,7 +2,7 @@
 import numpy as np
 
 
-def uniform_2_sphere(num: int = None):
+def uniform_2_sphere(num: int = None, radius: float = 1.0, center = [0, 0, 0]):
     """Uniform sampling on a 2-sphere
 
     Source: https://gist.github.com/andrewbolster/10274979
@@ -23,11 +23,11 @@ def uniform_2_sphere(num: int = None):
         cos_theta = np.random.uniform(-1.0, 1.0)
 
     theta = np.arccos(cos_theta)
-    x = np.sin(theta) * np.cos(phi)
-    y = np.sin(theta) * np.sin(phi)
-    z = np.cos(theta)
+    x = np.sin(theta) * np.cos(phi) * radius
+    y = np.sin(theta) * np.sin(phi) * radius
+    z = np.cos(theta) * radius
 
-    return np.stack((x, y, z), axis=-1)
+    return np.stack((x+center[0], y+center[1], z+center[2]), axis=-1)
 
 
 if __name__ == '__main__':

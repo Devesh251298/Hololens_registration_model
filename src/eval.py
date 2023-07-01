@@ -13,13 +13,15 @@ import os
 import pickle
 import time
 from typing import Dict, List
+import random
 
 import numpy as np
-import open3d  # Need to import before torch
+import open3d as o3 # Need to import before torch
 import pandas as pd
 from scipy import sparse
 from tqdm import tqdm
 import torch
+import copy
 
 from arguments import rpmnet_eval_arguments
 from common.misc import prepare_logger
@@ -29,9 +31,12 @@ from common.math_torch import se3
 from common.math.so3 import dcm2euler
 from data_loader.datasets import get_test_datasets
 import models.rpmnet
+import torchvision
+
+import data_loader.transforms as Transforms
 
 
-def compute_metrics(data: Dict, pred_transforms) -> Dict:
+def compute_metrics(transform_gt, pred_transforms) -> Dict:
     """Compute metrics required in the paper
     """
 
@@ -40,45 +45,32 @@ def compute_metrics(data: Dict, pred_transforms) -> Dict:
 
     with torch.no_grad():
         pred_transforms = pred_transforms
-        gt_transforms = data['transform_gt']
-        points_src = data['points_src'][..., :3]
-        points_ref = data['points_ref'][..., :3]
-        points_raw = data['points_raw'][..., :3]
+        gt_transforms = transform_gt
 
         # Euler angles, Individual translation errors (Deep Closest Point convention)
         # TODO Change rotation to torch operations
-        r_gt_euler_deg = dcm2euler(gt_transforms[:, :3, :3].detach().cpu().numpy(), seq='xyz')
-        r_pred_euler_deg = dcm2euler(pred_transforms[:, :3, :3].detach().cpu().numpy(), seq='xyz')
-        t_gt = gt_transforms[:, :3, 3]
-        t_pred = pred_transforms[:, :3, 3]
-        r_mse = np.mean((r_gt_euler_deg - r_pred_euler_deg) ** 2, axis=1)
-        r_mae = np.mean(np.abs(r_gt_euler_deg - r_pred_euler_deg), axis=1)
-        t_mse = torch.mean((t_gt - t_pred) ** 2, dim=1)
-        t_mae = torch.mean(torch.abs(t_gt - t_pred), dim=1)
+        r_gt_euler_deg = dcm2euler(gt_transforms[:3, :3], seq='xyz')
+        r_pred_euler_deg = dcm2euler(pred_transforms[:3, :3].copy(), seq='xyz')
+        t_gt = gt_transforms[:3, 3]
+        t_pred = pred_transforms[:3, 3].copy()
+        # print("r_gt_euler_deg: ", r_gt_euler_deg)
+        # print("r_pred_euler_deg: ", r_pred_euler_deg)
 
-        # Rotation, translation errors (isotropic, i.e. doesn't depend on error
-        # direction, which is more representative of the actual error)
-        concatenated = se3.concatenate(se3.inverse(gt_transforms), pred_transforms)
-        rot_trace = concatenated[:, 0, 0] + concatenated[:, 1, 1] + concatenated[:, 2, 2]
-        residual_rotdeg = torch.acos(torch.clamp(0.5 * (rot_trace - 1), min=-1.0, max=1.0)) * 180.0 / np.pi
-        residual_transmag = concatenated[:, :, 3].norm(dim=-1)
+        print("t_gt: ", t_gt)
+        print("t_pred: ", t_pred)
 
-        # Modified Chamfer distance
-        src_transformed = se3.transform(pred_transforms, points_src)
-        ref_clean = points_raw
-        src_clean = se3.transform(se3.concatenate(pred_transforms, se3.inverse(gt_transforms)), points_raw)
-        dist_src = torch.min(square_distance(src_transformed, ref_clean), dim=-1)[0]
-        dist_ref = torch.min(square_distance(points_ref, src_clean), dim=-1)[0]
-        chamfer_dist = torch.mean(dist_src, dim=1) + torch.mean(dist_ref, dim=1)
+        r_mse = np.mean((r_gt_euler_deg - r_pred_euler_deg) ** 2, axis=1)[0]
+        r_mae = np.mean(np.abs(r_gt_euler_deg - r_pred_euler_deg), axis=1)[0]
+        t_mse = np.mean((t_gt - t_pred) ** 2)
+        t_mae = np.mean(np.abs(t_gt - t_pred))
+
+
 
         metrics = {
             'r_mse': r_mse,
             'r_mae': r_mae,
-            't_mse': to_numpy(t_mse),
-            't_mae': to_numpy(t_mae),
-            'err_r_deg': to_numpy(residual_rotdeg),
-            'err_t': to_numpy(residual_transmag),
-            'chamfer_dist': to_numpy(chamfer_dist)
+            't_mse': t_mse,
+            't_mae': t_mae
         }
 
     return metrics
@@ -103,24 +95,9 @@ def print_metrics(logger, summary_metrics: Dict, losses_by_iteration: List = Non
                   title: str = 'Metrics'):
     """Prints out formated metrics to logger"""
 
-    logger.info(title + ':')
-    logger.info('=' * (len(title) + 1))
 
     if losses_by_iteration is not None:
         losses_all_str = ' | '.join(['{:.5f}'.format(c) for c in losses_by_iteration])
-        logger.info('Losses by iteration: {}'.format(losses_all_str))
-
-    logger.info('DeepCP metrics:{:.4f}(rot-rmse) | {:.4f}(rot-mae) | {:.4g}(trans-rmse) | {:.4g}(trans-mae)'.format(
-        summary_metrics['r_rmse'], summary_metrics['r_mae'],
-        summary_metrics['t_rmse'], summary_metrics['t_mae'],
-    ))
-    logger.info('Rotation error {:.4f}(deg, mean) | {:.4f}(deg, rmse)'.format(
-        summary_metrics['err_r_deg_mean'], summary_metrics['err_r_deg_rmse']))
-    logger.info('Translation error {:.4g}(mean) | {:.4g}(rmse)'.format(
-        summary_metrics['err_t_mean'], summary_metrics['err_t_rmse']))
-    logger.info('Chamfer error: {:.7f}(mean-sq)'.format(
-        summary_metrics['chamfer_dist']
-    ))
 
 
 def inference(data_loader, model: torch.nn.Module):
@@ -135,7 +112,6 @@ def inference(data_loader, model: torch.nn.Module):
         endpoints_out (Dict): Network endpoints
     """
 
-    _logger.info('Starting inference...')
     model.eval()
 
     pred_transforms_all = []
@@ -144,49 +120,208 @@ def inference(data_loader, model: torch.nn.Module):
     endpoints_out = defaultdict(list)
     total_rotation = []
 
-    with torch.no_grad():
-        for val_data in tqdm(data_loader):
+    vis1 = o3.visualization.Visualizer()
+    vis1.create_window(window_name='RPMNet', width=960, height=540, left=0, top=0)
 
-            rot_trace = val_data['transform_gt'][:, 0, 0] + val_data['transform_gt'][:, 1, 1] + \
-                        val_data['transform_gt'][:, 2, 2]
-            rotdeg = torch.acos(torch.clamp(0.5 * (rot_trace - 1), min=-1.0, max=1.0)) * 180.0 / np.pi
-            total_rotation.append(np.abs(to_numpy(rotdeg)))
+    vis2 = o3.visualization.Visualizer()
+    vis2.create_window(window_name='RPMNet_ICP', width=960, height=540, left=0, top=600)
 
-            dict_all_to_device(val_data, _device)
-            time_before = time.time()
-            pred_transforms, endpoints = model(val_data, _args.num_reg_iter)
-            total_time += time.time() - time_before
 
-            if _args.method == 'rpmnet':
-                all_betas.append(endpoints['beta'])
-                all_alphas.append(endpoints['alpha'])
+    rpm_stats = []
+    rpm_icp_stats = []
 
-            if isinstance(pred_transforms[-1], torch.Tensor):
-                pred_transforms_all.append(to_numpy(torch.stack(pred_transforms, dim=1)))
-            else:
-                pred_transforms_all.append(np.stack(pred_transforms, axis=1))
+    mesh = o3.io.read_triangle_mesh('STL/Segmentation.stl') 
+    # Extract the vertex positions
+    vertices = np.asarray(mesh.vertices)
 
-            # Saves match matrix. We only save the top matches to save storage/time.
-            # However, this still takes quite a bit of time to save. Comment out if not needed.
-            if 'perm_matrices' in endpoints:
-                perm_matrices = to_numpy(torch.stack(endpoints['perm_matrices'], dim=1))
-                thresh = np.percentile(perm_matrices, 99.9, axis=[2, 3])  # Only retain top 0.1% of entries
-                below_thresh_mask = perm_matrices < thresh[:, :, None, None]
-                perm_matrices[below_thresh_mask] = 0.0
+    # Scale down the vertices
+    scale_factor = 0.01 
+    scaled_vertices = vertices * scale_factor
 
-                for i_data in range(perm_matrices.shape[0]):
-                    sparse_perm_matrices = []
-                    for i_iter in range(perm_matrices.shape[1]):
-                        sparse_perm_matrices.append(sparse.coo_matrix(perm_matrices[i_data, i_iter, :, :]))
-                    endpoints_out['perm_matrices'].append(sparse_perm_matrices)
+    # Update the mesh with the scaled vertices
+    mesh.vertices = o3.utility.Vector3dVector(scaled_vertices)
+    vertices = np.asarray(mesh.vertices)
 
-    _logger.info('Total inference time: {}s'.format(total_time))
-    total_rotation = np.concatenate(total_rotation, axis=0)
-    _logger.info('Rotation range in data: {}(avg), {}(max)'.format(np.mean(total_rotation), np.max(total_rotation)))
-    pred_transforms_all = np.concatenate(pred_transforms_all, axis=0)
+    # Compute the centroid of the mesh vertices
+    centroid = np.mean(vertices, axis=0)
+
+    # Translate the vertices to center them around the origin
+    centered_vertices = vertices - centroid
+
+    # Update the mesh with the centered vertices
+    mesh.vertices = o3.utility.Vector3dVector(centered_vertices)
+
+    # Compute the surface normals
+    mesh.compute_vertex_normals()
+
+    pcd = o3.geometry.PointCloud()
+    pcd.points = mesh.vertices
+    pcd.colors = mesh.vertex_colors
+    pcd.normals = mesh.vertex_normals
+
+    pcd = pcd.uniform_down_sample(every_k_points=300)
+
+    source = copy.deepcopy(pcd)
+    source.remove_non_finite_points()
+
+    source_points = np.asarray(source.points)
+    source_points = source_points - source_points.min(axis = 0)
+    source_points = source_points / source_points.max(axis = 0)
+    source_points = source_points * 2
+    source.points = o3.utility.Vector3dVector(source_points)
+
+    source_points = np.asarray(source.points)
+    source_points = source_points - source_points.mean(axis = 0)
+    source.points = o3.utility.Vector3dVector(source_points)
+
+    source.estimate_normals()
+
+    source_global = copy.deepcopy(source)
+
+    for i in range(len(data_loader)):
+        data_batch = next(iter(data_loader))
+        # if data_batch['category'][0] != 'person':=
+        #     continue
+
+        source = copy.deepcopy(source_global)
+
+        rot_mag = np.random.uniform(0, 45)
+        trans_mag =  np.random.uniform(0, 2)
+        num_points = 4000
+        partial_p_keep = [1, np.random.uniform(0.5, 1)]
+        sample = {'points': np.concatenate((np.asarray(source.points), np.asarray(source.normals)), axis=1), 'label': 'Actual', 'idx': 4, 'category': 'person'}
+
+        transforms =  torchvision.transforms.Compose([Transforms.SetDeterministic(),
+                                    Transforms.SplitSourceRef(),
+                                    Transforms.RandomCrop(partial_p_keep),
+                                    Transforms.RandomTransformSE3_euler(rot_mag=rot_mag, trans_mag=trans_mag),
+                                    Transforms.Resampler(num_points),
+                                    Transforms.RandomJitter(),
+                                    Transforms.ShufflePoints()])
+
+
+        # # pred_transforms = pred_transforms
+        data_batch = transforms(sample)
+
+        ## convert to torch tensors
+
+        data_batch['points_src'] = torch.from_numpy(data_batch['points_src']).float().cpu()
+        data_batch['points_ref'] = torch.from_numpy(data_batch['points_ref']).float().cpu()
+
+        data_batch['points_src'] = data_batch['points_src'].unsqueeze(0)
+        data_batch['points_ref'] = data_batch['points_ref'].unsqueeze(0)
+
+        # with torch.no_grad():
+        #     pred_transforms, endpoints = model(data_batch, _args.num_reg_iter)
+
+        with torch.no_grad():
+            pred_transforms, endpoints = model(data_batch, _args.num_reg_iter)
+
+        source_points = data_batch['points_src'][..., :3].cpu().detach().numpy()
+        ref_points = data_batch['points_ref'][..., :3].cpu().detach().numpy()
+
+        source_points = np.reshape(source_points, (source_points.shape[0]*source_points.shape[1],source_points.shape[2]))
+        ref_points = np.reshape(ref_points, (ref_points.shape[0]*ref_points.shape[1],ref_points.shape[2]))
+
+        pcd = o3.geometry.PointCloud()
+        pcd.points = o3.utility.Vector3dVector(source_points)
+        o3.io.write_point_cloud("sync.ply", pcd)
+
+        source = o3.io.read_point_cloud("sync.ply")
+        source.remove_non_finite_points()
+
+        pcd = o3.geometry.PointCloud()
+        pcd.points = o3.utility.Vector3dVector(ref_points)
+        o3.io.write_point_cloud("sync1.ply", pcd)
+
+        ref = o3.io.read_point_cloud("sync1.ply")
+        ref.remove_non_finite_points()
+
+        source = source.voxel_down_sample(voxel_size=0.05)
+        target = ref.voxel_down_sample(voxel_size=0.05)
+
+        transform = pred_transforms[0].cpu().detach().numpy()[0]
+        transform = np.vstack((transform, np.array([0, 0, 0, 1])))
+ 
+        result = copy.deepcopy(source)
+        result.transform(transform)
+        gt_transforms = data_batch['transform_gt']
+        transform_gt = gt_transforms
+        transform_gt = np.vstack((transform_gt, np.array([0, 0, 0, 1])))
+        result_gt = copy.deepcopy(source)
+        result_gt.transform(transform_gt)
+
+        reg_p2p = o3.pipelines.registration.registration_icp(
+            source, target, 0.02, transform,
+            o3.pipelines.registration.TransformationEstimationPointToPoint(),
+            o3.pipelines.registration.ICPConvergenceCriteria(max_iteration = 200))
+
+        result_rpm_icp = copy.deepcopy(source)
+        result_rpm_icp.transform(reg_p2p.transformation)
+        # draw_registration_result(source, target, reg_p2p.transformation)
+        print(data_batch['category'][0])
+        rpmnet = compute_metrics(transform_gt, transform)
+        rpmnet_icp = compute_metrics(transform_gt, reg_p2p.transformation)
+
+        print("RPMNet : ",rpmnet)
+        print("RPMNet_ICP : ",rpmnet_icp)
+
+        rpm_stats.append({data_batch['category'][0] : rpmnet})
+        rpm_icp_stats.append({data_batch['category'][0] : rpmnet_icp})
+
+        source.paint_uniform_color([1, 0, 0])
+        target.paint_uniform_color([0, 1, 0])
+        result_gt.paint_uniform_color([0, 0, 1])
+        result.paint_uniform_color([0, 1, 1])
+        result_rpm_icp.paint_uniform_color([0, 1, 1])
+
+        vis1.add_geometry(result)
+        vis1.add_geometry(result_gt)
+        vis1.add_geometry(source)
+        vis1.add_geometry(target)
+
+        vis2.add_geometry(result_rpm_icp)
+        vis2.add_geometry(result_gt)
+        vis2.add_geometry(source)
+        vis2.add_geometry(target)
+        
+        count = 0
+        while count<1000:
+            vis1.update_geometry(result)
+            vis1.update_geometry(result_gt)
+            vis1.update_geometry(source)
+            vis1.update_geometry(target)
+            if not vis1.poll_events():
+                break
+            vis1.update_renderer()
+
+
+            vis2.update_geometry(result)
+            vis2.update_geometry(result_gt)
+            vis2.update_geometry(source)
+            vis2.update_geometry(target)
+            if not vis2.poll_events():
+                break
+            vis2.update_renderer()
+
+            count += 1
+
+        vis1.clear_geometries()
+        vis2.clear_geometries()
+
+    results = {'RPMNet': rpm_stats, 'RPMNet_ICP': rpm_icp_stats}
+    with open('results/results_noisy_partial_0.8_t_4_updated.json', 'w') as fp:
+        json.dump(results, fp)
 
     return pred_transforms_all, endpoints_out
 
+def draw_registration_result(source, target, transformation):
+    source_temp = copy.deepcopy(source)
+    target_temp = copy.deepcopy(target)
+    source_temp.paint_uniform_color([1, 0.706, 0])
+    target_temp.paint_uniform_color([0, 0.651, 0.929])
+    source_temp.transform(transformation)
+    o3.visualization.draw_geometries([source_temp, target_temp])
 
 def evaluate(pred_transforms, data_loader: torch.utils.data.dataloader.DataLoader):
     """ Evaluates the computed transforms against the groundtruth
@@ -199,7 +334,6 @@ def evaluate(pred_transforms, data_loader: torch.utils.data.dataloader.DataLoade
         Computed metrics (List of dicts), and summary metrics (only for last iter)
     """
 
-    _logger.info('Evaluating transforms...')
     num_processed, num_total = 0, len(pred_transforms)
 
     if pred_transforms.ndim == 4:
@@ -264,11 +398,9 @@ def save_eval_data(pred_transforms, endpoints, metrics, summary_metrics, save_pa
     with open(os.path.join(save_path, 'summary_metrics.json'), 'w') as json_out:
         json.dump(summary_metrics_float, json_out)
 
-    _logger.info('Saved evaluation results to {}'.format(save_path))
 
 
 def get_model():
-    _logger.info('Computing transforms using {}'.format(_args.method))
     if _args.method == 'rpmnet':
         assert _args.resume is not None
         model = models.rpmnet.get_model(_args)
@@ -284,10 +416,9 @@ def main():
     # Load data_loader
     test_dataset = get_test_datasets(_args)
     test_loader = torch.utils.data.DataLoader(test_dataset,
-                                              batch_size=_args.val_batch_size, shuffle=False)
+                                              batch_size=1, shuffle=True)
 
     if _args.transform_file is not None:
-        _logger.info('Loading from precomputed transforms: {}'.format(_args.transform_file))
         pred_transforms = np.load(_args.transform_file)
         endpoints = {}
     else:
@@ -295,10 +426,10 @@ def main():
         pred_transforms, endpoints = inference(test_loader, model)  # Feedforward transforms
 
     # Compute evaluation matrices
-    eval_metrics, summary_metrics = evaluate(pred_transforms, data_loader=test_loader)
+    # eval_metrics, summary_metrics = evaluate(pred_transforms, data_loader=test_loader)
 
-    save_eval_data(pred_transforms, endpoints, eval_metrics, summary_metrics, _args.eval_save_path)
-    _logger.info('Finished')
+    # save_eval_data(pred_transforms, endpoints, eval_metrics, summary_metrics, _args.eval_save_path)
+    # _logger.info('Finished')
 
 
 if __name__ == '__main__':
@@ -312,5 +443,6 @@ if __name__ == '__main__':
         _device = torch.device('cuda:0') if torch.cuda.is_available() else torch.device('cpu')
     else:
         _device = torch.device('cpu')
-
+    _device = torch.device('cpu')
     main()
+

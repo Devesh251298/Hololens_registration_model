@@ -20,7 +20,6 @@ _logger = logging.getLogger()
 def print_info(opt, log_dir=None):
     """ Logs source code configuration
     """
-    _logger.info('Command: {}'.format(' '.join(sys.argv)))
 
     # Print commit ID
     try:
@@ -28,7 +27,6 @@ def print_info(opt, log_dir=None):
         git_sha = repo.head.object.hexsha
         git_date = datetime.fromtimestamp(repo.head.object.committed_date).strftime('%Y-%m-%d')
         git_message = repo.head.object.message
-        _logger.info('Source is from Commit {} ({}): {}'.format(git_sha[:8], git_date, git_message.strip()))
 
         # Also create diff file in the log directory
         if log_dir is not None:
@@ -41,7 +39,7 @@ def print_info(opt, log_dir=None):
     # Arguments
     arg_str = ['{}: {}'.format(key, value) for key, value in vars(opt).items()]
     arg_str = ', '.join(arg_str)
-    _logger.info('Arguments: {}'.format(arg_str))
+    #_logger.info('Arguments: {}'.format(arg_str))
 
 
 def prepare_logger(opt: argparse.Namespace, log_path: str = None):
@@ -77,6 +75,5 @@ def prepare_logger(opt: argparse.Namespace, log_path: str = None):
     file_handler.setFormatter(log_formatter)
     logger.addHandler(file_handler)
     print_info(opt, log_path)
-    logger.info('Output and logs will be saved to {}'.format(log_path))
 
     return logger, log_path
