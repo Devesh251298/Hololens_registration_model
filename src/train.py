@@ -17,6 +17,7 @@ import torch
 import torch.nn as nn
 import torch.utils.data
 from tqdm import tqdm
+import open3d as o3
 
 from arguments import rpmnet_train_arguments
 from common.colors import BLUE, ORANGE
@@ -26,6 +27,9 @@ from common.math_torch import se3
 from data_loader.datasets import get_train_datasets
 from eval import compute_metrics, summarize_metrics, print_metrics
 from models.rpmnet import get_model
+import data_loader.transforms as Transforms
+import copy
+import torchvision
 
 # Set up arguments and logging
 parser = rpmnet_train_arguments()
@@ -64,6 +68,10 @@ def compute_losses(data: Dict, pred_transforms: List, endpoints: Dict,
     num_iter = len(pred_transforms)
 
     # Compute losses
+    # extend dimension to 1 x 4 x 4 which is a numpy array
+    data['transform_gt'] = np.expand_dims(data['transform_gt'], axis=0)
+    data['transform_gt'] = torch.from_numpy(data['transform_gt']).float()
+    
     gt_src_transformed = se3.transform(data['transform_gt'], data['points_src'][..., :3])
     if loss_type == 'mse':
         # MSE loss to the groundtruth (does not take into account possible symmetries)
@@ -224,18 +232,14 @@ def run(train_set, val_set):
     # dataloaders
     train_loader = torch.utils.data.DataLoader(train_set,
                                                batch_size=_args.train_batch_size, shuffle=True, num_workers=_args.num_workers)
-    val_loader = torch.utils.data.DataLoader(val_set,
-                                             batch_size=_args.val_batch_size, shuffle=False, num_workers=_args.num_workers)
 
     # optimizer
     optimizer = torch.optim.Adam(model.parameters(), lr=_args.lr)
 
-    # Summary writer and Checkpoint manager
-    train_writer = SummaryWriter(os.path.join(_log_path, 'train'), flush_secs=10)
-    val_writer = SummaryWriter(os.path.join(_log_path, 'val'), flush_secs=10)
     saver = CheckPointManager(os.path.join(_log_path, 'ckpt', 'model'), keep_checkpoint_every_n_hours=0.5)
     if _args.resume is not None:
         global_step = saver.load(_args.resume, model, optimizer)
+        print(global_step)
 
     # trainings
     torch.autograd.set_detect_anomaly(_args.debug)
@@ -247,10 +251,76 @@ def run(train_set, val_set):
     if _args.validate_every < 0:
         _args.validate_every = abs(_args.validate_every) * steps_per_epoch
 
-    for epoch in range(0, _args.epochs):
-        _logger.info('Begin epoch {} (steps {} - {})'.format(epoch, global_step, global_step + len(train_loader)))
-        tbar = tqdm(total=len(train_loader), ncols=100)
-        for train_data in train_loader:
+    mesh = o3.io.read_triangle_mesh('STL/Segmentation.stl')
+    # Extract the vertex positions
+    vertices = np.asarray(mesh.vertices)
+
+    # Scale down the vertices
+    scale_factor = 0.01
+    scaled_vertices = vertices * scale_factor
+
+    # Update the mesh with the scaled vertices
+    mesh.vertices = o3.utility.Vector3dVector(scaled_vertices)
+    vertices = np.asarray(mesh.vertices)
+
+    # Compute the centroid of the mesh vertices
+    centroid = np.mean(vertices, axis=0)
+
+    # Translate the vertices to center them around the origin
+    centered_vertices = vertices - centroid
+
+    # Update the mesh with the centered vertices
+    mesh.vertices = o3.utility.Vector3dVector(centered_vertices)
+
+    # Compute the surface normals
+    mesh.compute_vertex_normals()
+
+    pcd = o3.geometry.PointCloud()
+    pcd.points = mesh.vertices
+    pcd.colors = mesh.vertex_colors
+    pcd.normals = mesh.vertex_normals
+
+    pcd = pcd.uniform_down_sample(every_k_points=300)
+
+    source = copy.deepcopy(pcd)
+    source.remove_non_finite_points()
+
+    source_points = np.asarray(source.points)
+    source_points = source_points - source_points.min(axis = 0)
+    source_points = source_points / source_points.max(axis = 0)
+    source_points = source_points * 2
+    source.points = o3.utility.Vector3dVector(source_points)
+
+    source_points = np.asarray(source.points)
+    source_points = source_points - source_points.mean(axis = 0)
+    source.points = o3.utility.Vector3dVector(source_points)
+
+    source.estimate_normals()
+
+    for epoch in range(0, 5):
+        tbar = tqdm(total=100, ncols=100)
+        for i in range(100):
+            rot_mag = np.random.uniform(0, 45)
+            trans_mag =  np.random.uniform(0, 2)
+            num_points = 4000
+            partial_p_keep = [1, np.random.uniform(0.5, 1)]
+            sample = {'points': np.concatenate((np.asarray(source.points), np.asarray(source.normals)), axis=1), 'label': 'Actual', 'idx': 4, 'category': 'person'}
+
+            transforms =  torchvision.transforms.Compose([Transforms.SetDeterministic(),
+                                        Transforms.SplitSourceRef(),
+                                        Transforms.RandomCrop(partial_p_keep),
+                                        Transforms.RandomTransformSE3_euler(rot_mag=rot_mag, trans_mag=trans_mag),
+                                        Transforms.Resampler(num_points),
+                                        Transforms.RandomJitter(),
+                                        Transforms.ShufflePoints()])
+
+            train_data = transforms(sample)
+
+            train_data['points_src'] = torch.from_numpy(train_data['points_src']).float().cpu()
+            train_data['points_ref'] = torch.from_numpy(train_data['points_ref']).float().cpu()
+
+            train_data['points_src'] = train_data['points_src'].unsqueeze(0)
+            train_data['points_ref'] = train_data['points_ref'].unsqueeze(0)
             global_step += 1
 
             optimizer.zero_grad()
@@ -272,19 +342,13 @@ def run(train_set, val_set):
             tbar.set_description('Loss:{:.3g}'.format(train_losses['total']))
             tbar.update(1)
 
-            if global_step % _args.summary_every == 0:  # Save tensorboard logs
-                save_summaries(train_writer, data=train_data, predicted=pred_transforms, endpoints=endpoints,
-                               losses=train_losses, step=global_step)
-
-            if global_step % _args.validate_every == 0:  # Validation loop. Also saves checkpoints
-                model.eval()
-                val_score = validate(val_loader, model, val_writer, global_step)
-                saver.save(model, optimizer, step=global_step, score=val_score)
-                model.train()
+            # if global_step % _args.validate_every == 0:  # Validation loop. Also saves checkpoints
+            model.eval()
+            # val_score = validate(val_loader, model, val_writer, global_step)
+            saver.save(model, optimizer, step=global_step, score=0)
+            model.train()
 
         tbar.close()
-
-    _logger.info('Ending training. Number of steps = {}.'.format(global_step))
 
 
 if __name__ == '__main__':
