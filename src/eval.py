@@ -229,15 +229,15 @@ def inference(data_loader, model: torch.nn.Module):
         pcd.points = o3.utility.Vector3dVector(ref_points)
         o3.io.write_point_cloud("sync1.ply", pcd)
 
-        ref = o3.io.read_point_cloud("sync1.ply")
-        ref.remove_non_finite_points()
+        target = o3.io.read_point_cloud("sync1.ply")
+        target.remove_non_finite_points()
 
         source = source.voxel_down_sample(voxel_size=0.05)
-        target = ref.voxel_down_sample(voxel_size=0.05)
+        target = target.voxel_down_sample(voxel_size=0.05)
 
         transform = pred_transforms[0].cpu().detach().numpy()[0]
         transform = np.vstack((transform, np.array([0, 0, 0, 1])))
- 
+
         result = copy.deepcopy(source)
         result.transform(transform)
         gt_transforms = data_batch['transform_gt']
@@ -312,6 +312,7 @@ def draw_registration_result(source, target, result, result_gt, result_rpm_icp, 
 
     vis1.clear_geometries()
     vis2.clear_geometries()
+
 
 def evaluate(pred_transforms, data_loader: torch.utils.data.dataloader.DataLoader):
     """ Evaluates the computed transforms against the groundtruth
