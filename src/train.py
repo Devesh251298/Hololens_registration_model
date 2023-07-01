@@ -220,6 +220,26 @@ def validate(data_loader, model: torch.nn.Module, summary_writer: SummaryWriter,
     return score
 
 
+def generate_data(source):
+    rot_mag = np.random.uniform(0, 45)
+    trans_mag =  np.random.uniform(0, 2)
+    num_points = 4000
+    partial_p_keep = [1, np.random.uniform(0.5, 1)]
+    sample = {'points': np.concatenate((np.asarray(source.points), np.asarray(source.normals)), axis=1), 'label': 'Actual', 'idx': 4, 'category': 'person'}
+
+    transforms = torchvision.transforms.Compose([Transforms.SetDeterministic(),
+                                Transforms.SplitSourceRef(),
+                                Transforms.RandomCrop(partial_p_keep),
+                                Transforms.RandomTransformSE3_euler(rot_mag=rot_mag, trans_mag=trans_mag),
+                                Transforms.Resampler(num_points),
+                                Transforms.RandomJitter(),
+                                Transforms.ShufflePoints()])
+
+    data_batch = transforms(sample)
+
+    return data_batch
+
+
 def run(train_set, val_set):
     """Main train/val loop"""
 
@@ -239,7 +259,6 @@ def run(train_set, val_set):
     saver = CheckPointManager(os.path.join(_log_path, 'ckpt', 'model'), keep_checkpoint_every_n_hours=0.5)
     if _args.resume is not None:
         global_step = saver.load(_args.resume, model, optimizer)
-        print(global_step)
 
     # trainings
     torch.autograd.set_detect_anomaly(_args.debug)
@@ -300,21 +319,7 @@ def run(train_set, val_set):
     for epoch in range(0, 5):
         tbar = tqdm(total=100, ncols=100)
         for i in range(100):
-            rot_mag = np.random.uniform(0, 45)
-            trans_mag =  np.random.uniform(0, 2)
-            num_points = 4000
-            partial_p_keep = [1, np.random.uniform(0.5, 1)]
-            sample = {'points': np.concatenate((np.asarray(source.points), np.asarray(source.normals)), axis=1), 'label': 'Actual', 'idx': 4, 'category': 'person'}
-
-            transforms =  torchvision.transforms.Compose([Transforms.SetDeterministic(),
-                                        Transforms.SplitSourceRef(),
-                                        Transforms.RandomCrop(partial_p_keep),
-                                        Transforms.RandomTransformSE3_euler(rot_mag=rot_mag, trans_mag=trans_mag),
-                                        Transforms.Resampler(num_points),
-                                        Transforms.RandomJitter(),
-                                        Transforms.ShufflePoints()])
-
-            train_data = transforms(sample)
+            train_data = generate_data(source)
 
             train_data['points_src'] = torch.from_numpy(train_data['points_src']).float().cpu()
             train_data['points_ref'] = torch.from_numpy(train_data['points_ref']).float().cpu()
