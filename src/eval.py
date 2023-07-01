@@ -99,43 +99,34 @@ def print_metrics(logger, summary_metrics: Dict, losses_by_iteration: List = Non
     if losses_by_iteration is not None:
         losses_all_str = ' | '.join(['{:.5f}'.format(c) for c in losses_by_iteration])
 
+def generate_data(source):
+    rot_mag = np.random.uniform(0, 45)
+    trans_mag =  np.random.uniform(0, 2)
+    num_points = 4000
+    partial_p_keep = [1, np.random.uniform(0.5, 1)]
+    sample = {'points': np.concatenate((np.asarray(source.points), np.asarray(source.normals)), axis=1), 'label': 'Actual', 'idx': 4, 'category': 'person'}
 
-def inference(data_loader, model: torch.nn.Module):
-    """Runs inference over entire dataset
-
-    Args:
-        data_loader (torch.utils.data.DataLoader): Dataset loader
-        model (model.nn.Module): Network model to evaluate
-
-    Returns:
-        pred_transforms_all: predicted transforms (B, n_iter, 3, 4) where B is total number of instances
-        endpoints_out (Dict): Network endpoints
-    """
-
-    model.eval()
-
-    pred_transforms_all = []
-    all_betas, all_alphas = [], []
-    total_time = 0.0
-    endpoints_out = defaultdict(list)
-    total_rotation = []
-
-    vis1 = o3.visualization.Visualizer()
-    vis1.create_window(window_name='RPMNet', width=960, height=540, left=0, top=0)
-
-    vis2 = o3.visualization.Visualizer()
-    vis2.create_window(window_name='RPMNet_ICP', width=960, height=540, left=0, top=600)
+    transforms =  torchvision.transforms.Compose([Transforms.SetDeterministic(),
+                                Transforms.SplitSourceRef(),
+                                Transforms.RandomCrop(partial_p_keep),
+                                Transforms.RandomTransformSE3_euler(rot_mag=rot_mag, trans_mag=trans_mag),
+                                Transforms.Resampler(num_points),
+                                Transforms.RandomJitter(),
+                                Transforms.ShufflePoints()])
 
 
-    rpm_stats = []
-    rpm_icp_stats = []
+    # # pred_transforms = pred_transforms
+    data_batch = transforms(sample)
 
-    mesh = o3.io.read_triangle_mesh('STL/Segmentation.stl') 
+    return data_batch
+
+def get_source():
+    mesh = o3.io.read_triangle_mesh('STL/Segmentation.stl')
     # Extract the vertex positions
     vertices = np.asarray(mesh.vertices)
 
     # Scale down the vertices
-    scale_factor = 0.01 
+    scale_factor = 0.01
     scaled_vertices = vertices * scale_factor
 
     # Update the mesh with the scaled vertices
@@ -176,43 +167,47 @@ def inference(data_loader, model: torch.nn.Module):
 
     source.estimate_normals()
 
+    return source
+
+def inference(data_loader, model: torch.nn.Module):
+    """Runs inference over entire dataset
+
+    Args:
+        data_loader (torch.utils.data.DataLoader): Dataset loader
+        model (model.nn.Module): Network model to evaluate
+
+    Returns:
+        pred_transforms_all: predicted transforms (B, n_iter, 3, 4) where B is total number of instances
+        endpoints_out (Dict): Network endpoints
+    """
+
+    model.eval()
+
+    pred_transforms_all = []
+    endpoints_out = defaultdict(list)
+
+    vis1 = o3.visualization.Visualizer()
+    vis1.create_window(window_name='RPMNet', width=960, height=540, left=0, top=0)
+
+    vis2 = o3.visualization.Visualizer()
+    vis2.create_window(window_name='RPMNet_ICP', width=960, height=540, left=0, top=600)
+
+    rpm_stats = []
+    rpm_icp_stats = []
+
+    source = get_source()
     source_global = copy.deepcopy(source)
 
-    for i in range(len(data_loader)):
-        data_batch = next(iter(data_loader))
-        # if data_batch['category'][0] != 'person':=
-        #     continue
+    for i in range(100):
 
         source = copy.deepcopy(source_global)
-
-        rot_mag = np.random.uniform(0, 45)
-        trans_mag =  np.random.uniform(0, 2)
-        num_points = 4000
-        partial_p_keep = [1, np.random.uniform(0.5, 1)]
-        sample = {'points': np.concatenate((np.asarray(source.points), np.asarray(source.normals)), axis=1), 'label': 'Actual', 'idx': 4, 'category': 'person'}
-
-        transforms =  torchvision.transforms.Compose([Transforms.SetDeterministic(),
-                                    Transforms.SplitSourceRef(),
-                                    Transforms.RandomCrop(partial_p_keep),
-                                    Transforms.RandomTransformSE3_euler(rot_mag=rot_mag, trans_mag=trans_mag),
-                                    Transforms.Resampler(num_points),
-                                    Transforms.RandomJitter(),
-                                    Transforms.ShufflePoints()])
-
-
-        # # pred_transforms = pred_transforms
-        data_batch = transforms(sample)
-
-        ## convert to torch tensors
+        data_batch = generate_data(source)
 
         data_batch['points_src'] = torch.from_numpy(data_batch['points_src']).float().cpu()
         data_batch['points_ref'] = torch.from_numpy(data_batch['points_ref']).float().cpu()
 
         data_batch['points_src'] = data_batch['points_src'].unsqueeze(0)
         data_batch['points_ref'] = data_batch['points_ref'].unsqueeze(0)
-
-        # with torch.no_grad():
-        #     pred_transforms, endpoints = model(data_batch, _args.num_reg_iter)
 
         with torch.no_grad():
             pred_transforms, endpoints = model(data_batch, _args.num_reg_iter)
@@ -269,59 +264,54 @@ def inference(data_loader, model: torch.nn.Module):
         rpm_stats.append({data_batch['category'][0] : rpmnet})
         rpm_icp_stats.append({data_batch['category'][0] : rpmnet_icp})
 
-        source.paint_uniform_color([1, 0, 0])
-        target.paint_uniform_color([0, 1, 0])
-        result_gt.paint_uniform_color([0, 0, 1])
-        result.paint_uniform_color([0, 1, 1])
-        result_rpm_icp.paint_uniform_color([0, 1, 1])
-
-        vis1.add_geometry(result)
-        vis1.add_geometry(result_gt)
-        vis1.add_geometry(source)
-        vis1.add_geometry(target)
-
-        vis2.add_geometry(result_rpm_icp)
-        vis2.add_geometry(result_gt)
-        vis2.add_geometry(source)
-        vis2.add_geometry(target)
-        
-        count = 0
-        while count<1000:
-            vis1.update_geometry(result)
-            vis1.update_geometry(result_gt)
-            vis1.update_geometry(source)
-            vis1.update_geometry(target)
-            if not vis1.poll_events():
-                break
-            vis1.update_renderer()
-
-
-            vis2.update_geometry(result)
-            vis2.update_geometry(result_gt)
-            vis2.update_geometry(source)
-            vis2.update_geometry(target)
-            if not vis2.poll_events():
-                break
-            vis2.update_renderer()
-
-            count += 1
-
-        vis1.clear_geometries()
-        vis2.clear_geometries()
-
+        draw_registration_result(source, target, result, result_gt, result_rpm_icp, vis1, vis2)
+ 
     results = {'RPMNet': rpm_stats, 'RPMNet_ICP': rpm_icp_stats}
     with open('results/results_noisy_partial_0.8_t_4_updated.json', 'w') as fp:
         json.dump(results, fp)
 
     return pred_transforms_all, endpoints_out
 
-def draw_registration_result(source, target, transformation):
-    source_temp = copy.deepcopy(source)
-    target_temp = copy.deepcopy(target)
-    source_temp.paint_uniform_color([1, 0.706, 0])
-    target_temp.paint_uniform_color([0, 0.651, 0.929])
-    source_temp.transform(transformation)
-    o3.visualization.draw_geometries([source_temp, target_temp])
+
+def draw_registration_result(source, target, result, result_gt, result_rpm_icp, vis1, vis2):
+    source.paint_uniform_color([1, 0, 0])
+    target.paint_uniform_color([0, 1, 0])
+    result_gt.paint_uniform_color([0, 0, 1])
+    result.paint_uniform_color([0, 1, 1])
+    result_rpm_icp.paint_uniform_color([0, 1, 1])
+
+    vis1.add_geometry(result)
+    vis1.add_geometry(result_gt)
+    vis1.add_geometry(source)
+    vis1.add_geometry(target)
+
+    vis2.add_geometry(result_rpm_icp)
+    vis2.add_geometry(result_gt)
+    vis2.add_geometry(source)
+    vis2.add_geometry(target)
+ 
+    count = 0
+    while count < 1000:
+        vis1.update_geometry(result)
+        vis1.update_geometry(result_gt)
+        vis1.update_geometry(source)
+        vis1.update_geometry(target)
+        if not vis1.poll_events():
+            break
+        vis1.update_renderer()
+
+        vis2.update_geometry(result)
+        vis2.update_geometry(result_gt)
+        vis2.update_geometry(source)
+        vis2.update_geometry(target)
+        if not vis2.poll_events():
+            break
+        vis2.update_renderer()
+
+        count += 1
+
+    vis1.clear_geometries()
+    vis2.clear_geometries()
 
 def evaluate(pred_transforms, data_loader: torch.utils.data.dataloader.DataLoader):
     """ Evaluates the computed transforms against the groundtruth

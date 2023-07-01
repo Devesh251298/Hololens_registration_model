@@ -28,8 +28,6 @@ def get_train_datasets(args: argparse.Namespace):
 
     train_transforms, val_transforms = get_transforms(args.noise_type, args.rot_mag, args.trans_mag,
                                                       args.num_points, args.partial)
-    _logger.info('Train transforms: {}'.format(', '.join([type(t).__name__ for t in train_transforms])))
-    _logger.info('Val transforms: {}'.format(', '.join([type(t).__name__ for t in val_transforms])))
     train_transforms = torchvision.transforms.Compose(train_transforms)
     val_transforms = torchvision.transforms.Compose(val_transforms)
 
@@ -52,7 +50,6 @@ def get_test_datasets(args: argparse.Namespace):
 
     _, test_transforms = get_transforms(args.noise_type, args.rot_mag, args.trans_mag,
                                         args.num_points, args.partial)
-    _logger.info('Test transforms: {}'.format(', '.join([type(t).__name__ for t in test_transforms])))
     test_transforms = torchvision.transforms.Compose(test_transforms)
 
     if args.dataset_type == 'modelnet_hdf':
@@ -87,6 +84,8 @@ def get_transforms(noise_type: str,
     """
 
     partial_p_keep = partial_p_keep if partial_p_keep is not None else [0.7, 0.7]
+
+    partial_p_keep = [1, 0.8]
 
     if noise_type == "clean":
         # 1-1 correspondence for each point (resample first before splitting), no noise
@@ -154,7 +153,6 @@ class ModelNetHdf(Dataset):
         self._root = dataset_path
 
         metadata_fpath = os.path.join(self._root, '{}_files.txt'.format(subset))
-        self._logger.info('Loading data from {} for {}'.format(metadata_fpath, subset))
 
         if not os.path.exists(os.path.join(dataset_path)):
             self._download_dataset(dataset_path)
@@ -171,19 +169,25 @@ class ModelNetHdf(Dataset):
 
         if categories is not None:
             categories_idx = [self._category2idx[c] for c in categories]
-            self._logger.info('Categories used: {}.'.format(categories_idx))
             self._classes = categories
         else:
             categories_idx = None
-            self._logger.info('Using all categories.')
 
         self._data, self._labels = self._read_h5_files(h5_filelist, categories_idx)
+        # print(self._labels)
+        # print(categories_idx)
+        # print(self._classes)
+        # create a diction of classes and their indices
+        self._category2idx = {e[0]: e[1] for e in enumerate(self._classes)}
+        # print(self._category2idx)
         # self._data, self._labels = self._data[:32], self._labels[:32, ...]
         self._transform = transform
-        self._logger.info('Loaded {} {} instances.'.format(self._data.shape[0], subset))
 
     def __getitem__(self, item):
-        sample = {'points': self._data[item, :, :], 'label': self._labels[item], 'idx': np.array(item, dtype=np.int32)}
+        points = self._data[item:item+1, :, :]
+        # concat points based on first dimension
+        points = np.concatenate(points, axis=0)
+        sample = {'points': points, 'label': self._labels[item], 'idx': np.array(item, dtype=np.int32), 'category': self._idx2category[self._labels[item]]}
 
         if self._transform:
             sample = self._transform(sample)
