@@ -300,17 +300,6 @@ class ShufflePoints:
             sample['points_ref'] = np.random.permutation(sample['points_ref'])
             sample['points_src'] = np.random.permutation(sample['points_src'])
 
-        # sphere0 = uniform_2_sphere(100, 0.5, [0,0,0])
-        # sphere = uniform_2_sphere(100, 0.5, [1,1,1])
-        # sphere1 = uniform_2_sphere(100, 0.5, [-1,-1,-1])
-        # sphere2 = uniform_2_sphere(100, 0.5, [1,-1,1])
-        # sphere3 = uniform_2_sphere(100, 0.5, [-1,1,-1])
-        # sphere4 = uniform_2_sphere(100, 0.5, [1,1,-1])
-
-        # sphere = np.concatenate((sphere0, sphere, sphere1, sphere2, sphere3, sphere4), axis=0)
-
-        # random number of spheres between 0 and 10
-
         num_spheres = np.random.randint(0, 10)
         sphere = np.zeros((0, 3))
 

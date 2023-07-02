@@ -64,8 +64,6 @@ def compute_metrics(transform_gt, pred_transforms) -> Dict:
         t_mse = np.mean((t_gt - t_pred) ** 2)
         t_mae = np.mean(np.abs(t_gt - t_pred))
 
-
-
         metrics = {
             'r_mse': r_mse,
             'r_mae': r_mae,
@@ -76,43 +74,20 @@ def compute_metrics(transform_gt, pred_transforms) -> Dict:
     return metrics
 
 
-def summarize_metrics(metrics):
-    """Summaries computed metrices by taking mean over all data instances"""
-    summarized = {}
-    for k in metrics:
-        if k.endswith('mse'):
-            summarized[k[:-3] + 'rmse'] = np.sqrt(np.mean(metrics[k]))
-        elif k.startswith('err'):
-            summarized[k + '_mean'] = np.mean(metrics[k])
-            summarized[k + '_rmse'] = np.sqrt(np.mean(metrics[k]**2))
-        else:
-            summarized[k] = np.mean(metrics[k])
-
-    return summarized
-
-
-def print_metrics(logger, summary_metrics: Dict, losses_by_iteration: List = None,
-                  title: str = 'Metrics'):
-    """Prints out formated metrics to logger"""
-
-    if losses_by_iteration is not None:
-        losses_all_str = ' | '.join(['{:.5f}'.format(c) for c in losses_by_iteration])
-
-
 def generate_data(source):
     rot_mag = np.random.uniform(0, 45)
-    trans_mag =  np.random.uniform(0, 2)
+    trans_mag = np.random.uniform(0, 2)
     num_points = 4000
     partial_p_keep = [1, np.random.uniform(0.5, 1)]
     sample = {'points': np.concatenate((np.asarray(source.points), np.asarray(source.normals)), axis=1), 'label': 'Actual', 'idx': 4, 'category': 'person'}
 
     transforms = torchvision.transforms.Compose([Transforms.SetDeterministic(),
-                                Transforms.SplitSourceRef(),
-                                Transforms.RandomCrop(partial_p_keep),
-                                Transforms.RandomTransformSE3_euler(rot_mag=rot_mag, trans_mag=trans_mag),
-                                Transforms.Resampler(num_points),
-                                Transforms.RandomJitter(),
-                                Transforms.ShufflePoints()])
+                                                Transforms.SplitSourceRef(),
+                                                Transforms.RandomCrop(partial_p_keep),
+                                                Transforms.RandomTransformSE3_euler(rot_mag=rot_mag, trans_mag=trans_mag),
+                                                Transforms.Resampler(num_points),
+                                                Transforms.RandomJitter(),
+                                                Transforms.ShufflePoints()])
 
     data_batch = transforms(sample)
 
@@ -258,8 +233,8 @@ def inference(data_loader, model: torch.nn.Module):
         rpmnet = compute_metrics(transform_gt, transform)
         rpmnet_icp = compute_metrics(transform_gt, reg_p2p.transformation)
 
-        print("RPMNet : ",rpmnet)
-        print("RPMNet_ICP : ",rpmnet_icp)
+        print("RPMNet : ", rpmnet)
+        print("RPMNet_ICP : ", rpmnet_icp)
 
         rpm_stats.append({data_batch['category'][0] : rpmnet})
         rpm_icp_stats.append({data_batch['category'][0] : rpmnet_icp})
@@ -314,91 +289,12 @@ def draw_registration_result(source, target, result, result_gt, result_rpm_icp, 
     vis2.clear_geometries()
 
 
-def evaluate(pred_transforms, data_loader: torch.utils.data.dataloader.DataLoader):
-    """ Evaluates the computed transforms against the groundtruth
-
-    Args:
-        pred_transforms: Predicted transforms (B, [iter], 3/4, 4)
-        data_loader: Loader for dataset.
-
-    Returns:
-        Computed metrics (List of dicts), and summary metrics (only for last iter)
-    """
-
-    num_processed, num_total = 0, len(pred_transforms)
-
-    if pred_transforms.ndim == 4:
-        pred_transforms = torch.from_numpy(pred_transforms).to(_device)
-    else:
-        assert pred_transforms.ndim == 3 and \
-               (pred_transforms.shape[1:] == (4, 4) or pred_transforms.shape[1:] == (3, 4))
-        pred_transforms = torch.from_numpy(pred_transforms[:, None, :, :]).to(_device)
-
-    metrics_for_iter = [defaultdict(list) for _ in range(pred_transforms.shape[1])]
-
-    for data in tqdm(data_loader, leave=False):
-        dict_all_to_device(data, _device)
-
-        batch_size = 0
-        for i_iter in range(pred_transforms.shape[1]):
-            batch_size = data['points_src'].shape[0]
-
-            cur_pred_transforms = pred_transforms[num_processed:num_processed+batch_size, i_iter, :, :]
-            metrics = compute_metrics(data, cur_pred_transforms)
-            for k in metrics:
-                metrics_for_iter[i_iter][k].append(metrics[k])
-        num_processed += batch_size
-
-    for i_iter in range(len(metrics_for_iter)):
-        metrics_for_iter[i_iter] = {k: np.concatenate(metrics_for_iter[i_iter][k], axis=0)
-                                    for k in metrics_for_iter[i_iter]}
-        summary_metrics = summarize_metrics(metrics_for_iter[i_iter])
-        print_metrics(_logger, summary_metrics, title='Evaluation result (iter {})'.format(i_iter))
-
-    return metrics_for_iter, summary_metrics
-
-
-def save_eval_data(pred_transforms, endpoints, metrics, summary_metrics, save_path):
-    """Saves out the computed transforms
-    """
-
-    # Save transforms
-    np.save(os.path.join(save_path, 'pred_transforms.npy'), pred_transforms)
-
-    # Save endpoints if any
-    for k in endpoints:
-        if isinstance(endpoints[k], np.ndarray):
-            np.save(os.path.join(save_path, '{}.npy'.format(k)), endpoints[k])
-        else:
-            with open(os.path.join(save_path, '{}.pickle'.format(k)), 'wb') as fid:
-                pickle.dump(endpoints[k], fid)
-
-    # Save metrics: Write each iteration to a different worksheet.
-    writer = pd.ExcelWriter(os.path.join(save_path, 'metrics.xlsx'))
-    for i_iter in range(len(metrics)):
-        metrics[i_iter]['r_rmse'] = np.sqrt(metrics[i_iter]['r_mse'])
-        metrics[i_iter]['t_rmse'] = np.sqrt(metrics[i_iter]['t_mse'])
-        metrics[i_iter].pop('r_mse')
-        metrics[i_iter].pop('t_mse')
-        metrics_df = pd.DataFrame.from_dict(metrics[i_iter])
-        metrics_df.to_excel(writer, sheet_name='Iter_{}'.format(i_iter+1))
-    writer.close()
-
-    # Save summary metrics
-    summary_metrics_float = {k: float(summary_metrics[k]) for k in summary_metrics}
-    with open(os.path.join(save_path, 'summary_metrics.json'), 'w') as json_out:
-        json.dump(summary_metrics_float, json_out)
-
-
 def get_model():
-    if _args.method == 'rpmnet':
-        assert _args.resume is not None
-        model = models.rpmnet.get_model(_args)
-        model.to(_device)
-        saver = CheckPointManager(os.path.join(_log_path, 'ckpt', 'models'))
-        saver.load(_args.resume, model)
-    else:
-        raise NotImplementedError
+    model = models.rpmnet.get_model(_args)
+    model.to(_device)
+    saver = CheckPointManager(os.path.join(_log_path, 'ckpt', 'models'))
+    saver.load(_args.resume, model)
+
     return model
 
 
@@ -407,12 +303,8 @@ def main():
     test_loader = torch.utils.data.DataLoader(test_dataset,
                                               batch_size=1, shuffle=True)
 
-    if _args.transform_file is not None:
-        pred_transforms = np.load(_args.transform_file)
-        endpoints = {}
-    else:
-        model = get_model()
-        pred_transforms, endpoints = inference(test_loader, model)
+    model = get_model()
+    inference(test_loader, model)
 
 if __name__ == '__main__':
     # Arguments and logging
