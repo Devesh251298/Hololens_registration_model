@@ -18,8 +18,8 @@ import common.math.se3 as se3
 _logger = logging.getLogger()
 
 
-def get_source():
-    mesh = o3d.io.read_triangle_mesh('STL/Segmentation.stl')
+def get_source(filename: str):
+    mesh = o3d.io.read_triangle_mesh(filename)
     # Extract the vertex positions
     vertices = np.asarray(mesh.vertices)
 

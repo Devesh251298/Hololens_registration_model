@@ -80,7 +80,7 @@ def inference(data_loader, model: torch.nn.Module, args):
     rpm_stats = []
     rpm_icp_stats = []
 
-    source = get_source()
+    source = get_source('STL/Segmentation.stl')
     source_global = copy.deepcopy(source)
 
     for i in range(100):
@@ -303,7 +303,7 @@ def train(_args, _device, _logger, _log_path):
     torch.autograd.set_detect_anomaly(_args.debug)
     model.train()
 
-    source = get_source()
+    source = get_source('STL/Segmentation.stl')
 
     for epoch in range(0, 5):
         tbar = tqdm(total=100, ncols=100)
