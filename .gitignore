@@ -3,9 +3,12 @@ datasets/
 src/STL/
 eval_results/
 logs/
+src/__pycache__/
+.DS_Store
 
 # Ignore any file inside datasets folder
 datasets/*
 src/STL/*
 eval_results/*
 logs/*
+src/__pycache__/*
