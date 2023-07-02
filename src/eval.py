@@ -29,7 +29,7 @@ from common.torch import dict_all_to_device, CheckPointManager, to_numpy
 from common.math import se3
 from common.math_torch import se3
 from common.math.so3 import dcm2euler
-from data_loader.datasets import get_test_datasets
+from data_loader.datasets import get_test_datasets, get_source, generate_data
 import models.rpmnet
 import torchvision
 
@@ -72,76 +72,6 @@ def compute_metrics(transform_gt, pred_transforms) -> Dict:
         }
 
     return metrics
-
-
-def generate_data(source):
-    rot_mag = np.random.uniform(0, 45)
-    trans_mag = np.random.uniform(0, 2)
-    num_points = 4000
-    partial_p_keep = [1, np.random.uniform(0.5, 1)]
-    sample = {'points': np.concatenate((np.asarray(source.points), np.asarray(source.normals)), axis=1), 'label': 'Actual', 'idx': 4, 'category': 'person'}
-
-    transforms = torchvision.transforms.Compose([Transforms.SetDeterministic(),
-                                                Transforms.SplitSourceRef(),
-                                                Transforms.RandomCrop(partial_p_keep),
-                                                Transforms.RandomTransformSE3_euler(rot_mag=rot_mag, trans_mag=trans_mag),
-                                                Transforms.Resampler(num_points),
-                                                Transforms.RandomJitter(),
-                                                Transforms.ShufflePoints()])
-
-    data_batch = transforms(sample)
-
-    return data_batch
-
-
-def get_source():
-    mesh = o3.io.read_triangle_mesh('STL/Segmentation.stl')
-    # Extract the vertex positions
-    vertices = np.asarray(mesh.vertices)
-
-    # Scale down the vertices
-    scale_factor = 0.01
-    scaled_vertices = vertices * scale_factor
-
-    # Update the mesh with the scaled vertices
-    mesh.vertices = o3.utility.Vector3dVector(scaled_vertices)
-    vertices = np.asarray(mesh.vertices)
-
-    # Compute the centroid of the mesh vertices
-    centroid = np.mean(vertices, axis=0)
-
-    # Translate the vertices to center them around the origin
-    centered_vertices = vertices - centroid
-
-    # Update the mesh with the centered vertices
-    mesh.vertices = o3.utility.Vector3dVector(centered_vertices)
-
-    # Compute the surface normals
-    mesh.compute_vertex_normals()
-
-    pcd = o3.geometry.PointCloud()
-    pcd.points = mesh.vertices
-    pcd.colors = mesh.vertex_colors
-    pcd.normals = mesh.vertex_normals
-
-    pcd = pcd.uniform_down_sample(every_k_points=300)
-
-    source = copy.deepcopy(pcd)
-    source.remove_non_finite_points()
-
-    source_points = np.asarray(source.points)
-    source_points = source_points - source_points.min(axis = 0)
-    source_points = source_points / source_points.max(axis = 0)
-    source_points = source_points * 2
-    source.points = o3.utility.Vector3dVector(source_points)
-
-    source_points = np.asarray(source.points)
-    source_points = source_points - source_points.mean(axis = 0)
-    source.points = o3.utility.Vector3dVector(source_points)
-
-    source.estimate_normals()
-
-    return source
 
 
 def inference(data_loader, model: torch.nn.Module):

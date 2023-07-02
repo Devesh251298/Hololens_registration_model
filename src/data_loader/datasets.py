@@ -6,6 +6,7 @@ import os
 from typing import List
 
 import h5py
+import copy
 import numpy as np
 import open3d as o3d
 from torch.utils.data import Dataset
@@ -15,6 +16,76 @@ import data_loader.transforms as Transforms
 import common.math.se3 as se3
 
 _logger = logging.getLogger()
+
+
+def get_source():
+    mesh = o3d.io.read_triangle_mesh('STL/Segmentation.stl')
+    # Extract the vertex positions
+    vertices = np.asarray(mesh.vertices)
+
+    # Scale down the vertices
+    scale_factor = 0.01
+    scaled_vertices = vertices * scale_factor
+
+    # Update the mesh with the scaled vertices
+    mesh.vertices = o3d.utility.Vector3dVector(scaled_vertices)
+    vertices = np.asarray(mesh.vertices)
+
+    # Compute the centroid of the mesh vertices
+    centroid = np.mean(vertices, axis=0)
+
+    # Translate the vertices to center them around the origin
+    centered_vertices = vertices - centroid
+
+    # Update the mesh with the centered vertices
+    mesh.vertices = o3d.utility.Vector3dVector(centered_vertices)
+
+    # Compute the surface normals
+    mesh.compute_vertex_normals()
+
+    pcd = o3d.geometry.PointCloud()
+    pcd.points = mesh.vertices
+    pcd.colors = mesh.vertex_colors
+    pcd.normals = mesh.vertex_normals
+
+    pcd = pcd.uniform_down_sample(every_k_points=300)
+
+    source = copy.deepcopy(pcd)
+    source.remove_non_finite_points()
+
+    source_points = np.asarray(source.points)
+    source_points = source_points - source_points.min(axis = 0)
+    source_points = source_points / source_points.max(axis = 0)
+    source_points = source_points * 2
+    source.points = o3d.utility.Vector3dVector(source_points)
+
+    source_points = np.asarray(source.points)
+    source_points = source_points - source_points.mean(axis = 0)
+    source.points = o3d.utility.Vector3dVector(source_points)
+
+    source.estimate_normals()
+
+    return source
+
+
+def generate_data(source):
+    rot_mag = np.random.uniform(0, 45)
+    trans_mag = np.random.uniform(0, 2)
+    num_points = 4000
+    partial_p_keep = [1, np.random.uniform(0.5, 1)]
+    sample = {'points': np.concatenate((np.asarray(source.points), np.asarray(source.normals)), axis=1), 'label': 'Actual', 'idx': 4, 'category': 'person'}
+
+    transforms = torchvision.transforms.Compose([Transforms.SetDeterministic(),
+                                                Transforms.SplitSourceRef(),
+                                                Transforms.RandomCrop(partial_p_keep),
+                                                Transforms.RandomTransformSE3_euler(rot_mag=rot_mag, trans_mag=trans_mag),
+                                                Transforms.Resampler(num_points),
+                                                Transforms.RandomJitter(),
+                                                Transforms.ShufflePoints(add_noise=True)])
+
+    data_batch = transforms(sample)
+
+    return data_batch
 
 
 def get_train_datasets(args: argparse.Namespace):
@@ -130,7 +201,7 @@ def get_transforms(noise_type: str,
                            Transforms.RandomTransformSE3_euler(rot_mag=rot_mag, trans_mag=trans_mag),
                            Transforms.Resampler(num_points),
                            Transforms.RandomJitter(),
-                           Transforms.ShufflePoints()]
+                           Transforms.ShufflePoints(add_noise=True)]
     else:
         raise NotImplementedError
 

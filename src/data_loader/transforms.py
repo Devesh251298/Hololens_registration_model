@@ -293,6 +293,9 @@ class RandomRotatorZ(RandomTransformSE3):
 
 class ShufflePoints:
     """Shuffles the order of the points"""
+    def __init__(self, add_noise=False):
+        self._add_noise = add_noise
+
     def __call__(self, sample):
         if 'points' in sample:
             sample['points'] = np.random.permutation(sample['points'])
@@ -300,15 +303,16 @@ class ShufflePoints:
             sample['points_ref'] = np.random.permutation(sample['points_ref'])
             sample['points_src'] = np.random.permutation(sample['points_src'])
 
-        num_spheres = np.random.randint(0, 10)
-        sphere = np.zeros((0, 3))
+        if self._add_noise:
+            num_spheres = np.random.randint(0, 10)
+            sphere = np.zeros((0, 3))
 
-        for i in range(num_spheres):
-            sphere = np.concatenate((sphere, uniform_2_sphere(100, 0.5, np.random.uniform(-1, 1, 3))), axis=0)
+            for i in range(num_spheres):
+                sphere = np.concatenate((sphere, uniform_2_sphere(100, 0.5, np.random.uniform(-1, 1, 3))), axis=0)
 
-        sphere = np.concatenate((sphere, sphere[:, :3]), axis=1)
-        sphere = sphere.astype(sample['points_ref'].dtype)
-        sample['points_ref'] = np.concatenate((sample['points_ref'], sphere), axis=0)
+            sphere = np.concatenate((sphere, sphere[:, :3]), axis=1)
+            sphere = sphere.astype(sample['points_ref'].dtype)
+            sample['points_ref'] = np.concatenate((sample['points_ref'], sphere), axis=0)
         return sample
 
 
