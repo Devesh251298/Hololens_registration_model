@@ -30,6 +30,8 @@ def rpmnet_arguments():
                         metavar='T', help='Maximum magnitude of translation perturbation')
     parser.add_argument('--partial', default=[0.7, 0.7], nargs='+', type=float,
                         help='Approximate proportion of points to keep for partial overlap (Set to 1.0 to disable)')
+    parser.add_argument('--partial_min', default=0.5, type=float,
+                        help='Minimum proportion of points to keep for partial overlap')
     # Model
     parser.add_argument('--method', type=str, default='rpmnet', choices=['rpmnet'],
                         help='Model to use. Note: Only rpmnet is supported for training.'
@@ -55,10 +57,18 @@ def rpmnet_arguments():
                         help='training mini-batch size (default 8)')
     parser.add_argument('-b', '--val_batch_size', default=16, type=int, metavar='N',
                         help='mini-batch size during validation or testing (default: 16)')
-    parser.add_argument('--resume', default=None, type=str, metavar='PATH',
+    parser.add_argument('--resume', default='models/model-translation.pth', type=str, metavar='PATH',
                         help='Pretrained network to load from. Optional for train, required for inference.')
     parser.add_argument('--gpu', default=0, type=int, metavar='DEVICE',
                         help='GPU to use, ignored if no GPU is present. Set to negative to use cpu')
+    parser.add_argument('--iterations', default=100, type=int, metavar='N',
+                        help='Number of iterations to run for inference')
+    parser.add_argument('--object_file', default="STL/Segmentation.stl", type=str, metavar='PATH',
+                        help='Path to the object file to be registered. Required for inference')
+    parser.add_argument('--noise', default=True, type=bool, metavar='PATH',
+                        help='Whether to add noise to the object file to be registered. Required for inference')
+    parser.add_argument('--num_spheres', default=10, type=int, metavar='PATH',
+                        help='Number of spheres to add to the object file to be registered. Required for inference')
     return parser
 
 
@@ -72,7 +82,7 @@ def rpmnet_train_arguments():
                         help='path to the categories to be val')  # eg. './sampledata/modelnet40_half1.txt'
     # Training parameters
     parser.add_argument('--lr', default=1e-4, type=float, help='Learning rate during training')
-    parser.add_argument('--epochs', default=1000, type=int, metavar='N',
+    parser.add_argument('--epochs', default=1, type=int, metavar='N',
                         help='number of total epochs to run')
     parser.add_argument('--summary_every', default=200, type=int, metavar='N',
                         help='Frequency of saving summary (number of steps if positive, number of epochs if negative)')

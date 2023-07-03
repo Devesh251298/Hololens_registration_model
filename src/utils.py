@@ -12,7 +12,7 @@ from common.math_torch import se3
 
 from common.math.so3 import dcm2euler
 from common.torch import dict_all_to_device, CheckPointManager, TorchDebugger
-from data_loader.datasets import get_test_datasets, get_source, generate_data
+from data_loader.datasets import get_source, generate_data
 import models.rpmnet
 
 
@@ -54,7 +54,7 @@ def compute_metrics(transform_gt, pred_transforms) -> Dict:
     return metrics
 
 
-def inference(data_loader, model: torch.nn.Module, args):
+def inference(model: torch.nn.Module, args):
     """Runs inference over entire dataset
 
     Args:
@@ -80,13 +80,12 @@ def inference(data_loader, model: torch.nn.Module, args):
     rpm_stats = []
     rpm_icp_stats = []
 
-    source = get_source('STL/Segmentation.stl')
+    source = get_source(args.object_file)
     source_global = copy.deepcopy(source)
 
-    for i in range(100):
-
+    for i in range(args.iterations):
         source = copy.deepcopy(source_global)
-        data_batch = generate_data(source)
+        data_batch = generate_data(source, args)
 
         data_batch['points_src'] = torch.from_numpy(data_batch['points_src']).float().cpu()
         data_batch['points_ref'] = torch.from_numpy(data_batch['points_ref']).float().cpu()
@@ -199,24 +198,21 @@ def draw_registration_result(source, target, result, result_gt, result_rpm_icp, 
     vis2.clear_geometries()
 
 
-def get_model(args, _device, _log_path):
+def get_model(args, device, log_path):
     model = models.rpmnet.get_model(args)
-    model.to(_device)
-    saver = CheckPointManager(os.path.join(_log_path, 'ckpt', 'models'))
+    model.to(device)
+    saver = CheckPointManager(os.path.join(log_path, 'ckpt', 'models'))
     saver.load(args.resume, model)
 
     return model
 
 
-def test(args, _device, _log_path):
-    test_dataset = get_test_datasets(args)
-    test_loader = torch.utils.data.DataLoader(test_dataset,
-                                              batch_size=1, shuffle=True)
+def test(args, device, log_path):
+    model = get_model(args, device, log_path)
+    inference(model, args)
 
-    model = get_model(args, _device, _log_path)
-    inference(test_loader, model, args)
 
-def compute_losses(data: Dict, pred_transforms: List, _args, endpoints: Dict,
+def compute_losses(data: Dict, pred_transforms: List, args, endpoints: Dict,
                    loss_type: str = 'mae', reduction: str = 'mean') -> Dict:
     """Compute losses
 
@@ -240,7 +236,7 @@ def compute_losses(data: Dict, pred_transforms: List, _args, endpoints: Dict,
     # extend dimension to 1 x 4 x 4 which is a numpy array
     data['transform_gt'] = np.expand_dims(data['transform_gt'], axis=0)
     data['transform_gt'] = torch.from_numpy(data['transform_gt']).float()
-    
+
     gt_src_transformed = se3.transform(data['transform_gt'], data['points_src'][..., :3])
     if loss_type == 'mse':
         # MSE loss to the groundtruth (does not take into account possible symmetries)
@@ -267,8 +263,8 @@ def compute_losses(data: Dict, pred_transforms: List, _args, endpoints: Dict,
 
     # Penalize outliers
     for i in range(num_iter):
-        ref_outliers_strength = (1.0 - torch.sum(endpoints['perm_matrices'][i], dim=1)) * _args.wt_inliers
-        src_outliers_strength = (1.0 - torch.sum(endpoints['perm_matrices'][i], dim=2)) * _args.wt_inliers
+        ref_outliers_strength = (1.0 - torch.sum(endpoints['perm_matrices'][i], dim=1)) * args.wt_inliers
+        src_outliers_strength = (1.0 - torch.sum(endpoints['perm_matrices'][i], dim=2)) * args.wt_inliers
         if reduction.lower() == 'mean':
             losses['outlier_{}'.format(i)] = torch.mean(ref_outliers_strength) + torch.mean(src_outliers_strength)
         elif reduction.lower() == 'none':
@@ -285,32 +281,32 @@ def compute_losses(data: Dict, pred_transforms: List, _args, endpoints: Dict,
     return losses
 
 
-def train(_args, _device, _logger, _log_path):
+def train(args, device, logger, log_path):
     """Main train/val loop"""
 
-    _logger.debug('Trainer (PID=%d), %s', os.getpid(), _args)
+    logger.debug('Trainer (PID=%d), %s', os.getpid(), args)
 
-    model = get_model(_args, _device, _log_path)
-    model.to(_device)
+    model = get_model(args, device, log_path)
+    model.to(device)
     global_step = 0
 
     # optimizer
-    optimizer = torch.optim.Adam(model.parameters(), lr=_args.lr)
+    optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
 
-    saver = CheckPointManager(os.path.join(_log_path, 'ckpt', 'model'), keep_checkpoint_every_n_hours=0.5)
-    if _args.resume is not None:
-        global_step = saver.load(_args.resume, model, optimizer)
+    saver = CheckPointManager(os.path.join(log_path, 'ckpt', 'model'), keep_checkpoint_every_n_hours=0.5)
+    if args.resume is not None:
+        global_step = saver.load(args.resume, model, optimizer)
 
     # trainings
-    torch.autograd.set_detect_anomaly(_args.debug)
+    torch.autograd.set_detect_anomaly(args.debug)
     model.train()
 
-    source = get_source('STL/Segmentation.stl')
+    source = get_source(args.object_file)
 
-    for epoch in range(0, 5):
-        tbar = tqdm(total=100, ncols=100)
-        for i in range(100):
-            train_data = generate_data(source)
+    for epoch in range(0, args.epochs):
+        tbar = tqdm(total=args.iterations, ncols=args.iterations)
+        for i in range(args.iterations):
+            train_data = generate_data(source, args)
 
             train_data['points_src'] = torch.from_numpy(train_data['points_src']).float().cpu()
             train_data['points_ref'] = torch.from_numpy(train_data['points_ref']).float().cpu()
@@ -322,13 +318,13 @@ def train(_args, _device, _logger, _log_path):
             optimizer.zero_grad()
 
             # Forward through neural network
-            dict_all_to_device(train_data, _device)
-            pred_transforms, endpoints = model(train_data, _args.num_train_reg_iter)  # Use less iter during training
+            dict_all_to_device(train_data, device)
+            pred_transforms, endpoints = model(train_data, args.num_train_reg_iter)  # Use less iter during training
 
             # Compute loss, and optimize
-            train_losses = compute_losses(train_data, pred_transforms, _args, endpoints,
-                                          loss_type=_args.loss_type, reduction='mean')
-            if _args.debug:
+            train_losses = compute_losses(train_data, pred_transforms, args, endpoints,
+                                          loss_type=args.loss_type, reduction='mean')
+            if args.debug:
                 with TorchDebugger():
                     train_losses['total'].backward()
             else:
@@ -338,7 +334,7 @@ def train(_args, _device, _logger, _log_path):
             tbar.set_description('Loss:{:.3g}'.format(train_losses['total']))
             tbar.update(1)
 
-            # if global_step % _args.validate_every == 0:  # Validation loop. Also saves checkpoints
+            # if global_step % args.validate_every == 0:  # Validation loop. Also saves checkpoints
             model.eval()
             # val_score = validate(val_loader, model, val_writer, global_step)
             saver.save(model, optimizer, step=global_step, score=0)

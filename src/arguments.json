@@ -1,0 +1,15 @@
+{
+    "model" : {
+        "name" : "model-translation",
+        "iterations" : 1000
+    },
+    "data" : {
+        "object_file" : "STL/Segmentation.stl",
+        "num_points" : 4000,
+        "noise" : true,
+        "noise_spheres" : 10,
+        "partial" : 0.5,
+        "trans_mag" : 10,
+        "rot_mag" : 45
+    }
+}

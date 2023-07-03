@@ -8,7 +8,6 @@ from common.torch import to_numpy
 from models.pointnet_util import square_distance, angle_difference
 from models.feature_nets import FeatExtractionEarlyFusion
 from models.feature_nets import ParameterPredictionNet
-# from models.feature_nets import ParameterPredictionNetConstant as ParameterPredictionNet
 from common.math_torch import se3
 
 _logger = logging.getLogger(__name__)
