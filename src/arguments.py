@@ -26,7 +26,7 @@ def rpmnet_arguments():
                         help='Types of perturbation to consider')
     parser.add_argument('--rot_mag', default=45.0, type=float,
                         metavar='T', help='Maximum magnitude of rotation perturbation (in degrees)')
-    parser.add_argument('--trans_mag', default=0.5, type=float,
+    parser.add_argument('--trans_mag', default=5, type=float,
                         metavar='T', help='Maximum magnitude of translation perturbation')
     parser.add_argument('--partial', default=[0.7, 0.7], nargs='+', type=float,
                         help='Approximate proportion of points to keep for partial overlap (Set to 1.0 to disable)')

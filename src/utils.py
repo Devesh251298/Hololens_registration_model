@@ -54,6 +54,53 @@ def compute_metrics(transform_gt, pred_transforms) -> Dict:
     return metrics
 
 
+def generate_target(source_points, ref_points, pred_transforms, data_batch):
+    pcd = o3.geometry.PointCloud()
+    pcd.points = o3.utility.Vector3dVector(source_points)
+    o3.io.write_point_cloud("sync.ply", pcd)
+
+    source = o3.io.read_point_cloud("sync.ply")
+    source.remove_non_finite_points()
+
+    pcd = o3.geometry.PointCloud()
+    pcd.points = o3.utility.Vector3dVector(ref_points)
+    o3.io.write_point_cloud("sync1.ply", pcd)
+
+    target = o3.io.read_point_cloud("sync1.ply")
+    target.remove_non_finite_points()
+
+    source = source.voxel_down_sample(voxel_size=0.05)
+    target = target.voxel_down_sample(voxel_size=0.05)
+
+    transform = pred_transforms[0].cpu().detach().numpy()[0]
+    transform = np.vstack((transform, np.array([0, 0, 0, 1])))
+
+    result = copy.deepcopy(source)
+    result.transform(transform)
+    gt_transforms = data_batch['transform_gt']
+    transform_gt = gt_transforms
+    transform_gt = np.vstack((transform_gt, np.array([0, 0, 0, 1])))
+    result_gt = copy.deepcopy(source)
+    result_gt.transform(transform_gt)
+
+    reg_p2p = o3.pipelines.registration.registration_icp(
+        source, target, 0.02, transform,
+        o3.pipelines.registration.TransformationEstimationPointToPoint(),
+        o3.pipelines.registration.ICPConvergenceCriteria(max_iteration = 200))
+
+    result_rpm_icp = copy.deepcopy(source)
+    result_rpm_icp.transform(reg_p2p.transformation)
+    # draw_registration_result(source, target, reg_p2p.transformation)
+    print(data_batch['category'][0])
+    rpmnet = compute_metrics(transform_gt, transform)
+    rpmnet_icp = compute_metrics(transform_gt, reg_p2p.transformation)
+
+    print("RPMNet : ", rpmnet)
+    print("RPMNet_ICP : ", rpmnet_icp)
+
+    return result, source, target, result_gt, result_rpm_icp, rpmnet, rpmnet_icp
+
+
 def inference(model: torch.nn.Module, args):
     """Runs inference over entire dataset
 
@@ -102,48 +149,7 @@ def inference(model: torch.nn.Module, args):
         source_points = np.reshape(source_points, (source_points.shape[0]*source_points.shape[1],source_points.shape[2]))
         ref_points = np.reshape(ref_points, (ref_points.shape[0]*ref_points.shape[1],ref_points.shape[2]))
 
-        pcd = o3.geometry.PointCloud()
-        pcd.points = o3.utility.Vector3dVector(source_points)
-        o3.io.write_point_cloud("sync.ply", pcd)
-
-        source = o3.io.read_point_cloud("sync.ply")
-        source.remove_non_finite_points()
-
-        pcd = o3.geometry.PointCloud()
-        pcd.points = o3.utility.Vector3dVector(ref_points)
-        o3.io.write_point_cloud("sync1.ply", pcd)
-
-        target = o3.io.read_point_cloud("sync1.ply")
-        target.remove_non_finite_points()
-
-        source = source.voxel_down_sample(voxel_size=0.05)
-        target = target.voxel_down_sample(voxel_size=0.05)
-
-        transform = pred_transforms[0].cpu().detach().numpy()[0]
-        transform = np.vstack((transform, np.array([0, 0, 0, 1])))
-
-        result = copy.deepcopy(source)
-        result.transform(transform)
-        gt_transforms = data_batch['transform_gt']
-        transform_gt = gt_transforms
-        transform_gt = np.vstack((transform_gt, np.array([0, 0, 0, 1])))
-        result_gt = copy.deepcopy(source)
-        result_gt.transform(transform_gt)
-
-        reg_p2p = o3.pipelines.registration.registration_icp(
-            source, target, 0.02, transform,
-            o3.pipelines.registration.TransformationEstimationPointToPoint(),
-            o3.pipelines.registration.ICPConvergenceCriteria(max_iteration = 200))
-
-        result_rpm_icp = copy.deepcopy(source)
-        result_rpm_icp.transform(reg_p2p.transformation)
-        # draw_registration_result(source, target, reg_p2p.transformation)
-        print(data_batch['category'][0])
-        rpmnet = compute_metrics(transform_gt, transform)
-        rpmnet_icp = compute_metrics(transform_gt, reg_p2p.transformation)
-
-        print("RPMNet : ", rpmnet)
-        print("RPMNet_ICP : ", rpmnet_icp)
+        result, source, target, result_gt, result_rpm_icp, rpmnet, rpmnet_icp = generate_target(source_points, ref_points, pred_transforms, data_batch)
 
         rpm_stats.append({data_batch['category'][0] : rpmnet})
         rpm_icp_stats.append({data_batch['category'][0] : rpmnet_icp})
