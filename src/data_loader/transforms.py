@@ -307,8 +307,11 @@ class ShufflePoints:
             num_spheres = np.random.randint(0, 10)
             sphere = np.zeros((0, 3))
 
-            for i in range(num_spheres):
-                sphere = np.concatenate((sphere, uniform_2_sphere(100, 0.5, np.random.uniform(-1, 1, 3))), axis=0)
+            for i in range(num_spheres//2):
+                sphere = np.concatenate((sphere, uniform_2_sphere(100, 0.5, np.random.uniform(-2, -1, 3))), axis=0)
+            
+            for i in range(num_spheres//2):
+                sphere = np.concatenate((sphere, uniform_2_sphere(100, 0.5, np.random.uniform(1, 2, 3))), axis=0)
 
             sphere = np.concatenate((sphere, sphere[:, :3]), axis=1)
             sphere = sphere.astype(sample['points_ref'].dtype)

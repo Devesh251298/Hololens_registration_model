@@ -199,19 +199,21 @@ def draw_registration_result(source, target, result, result_gt, result_rpm_icp, 
     vis2.clear_geometries()
 
 
-def get_model(args, _device):
+def get_model(args, _device, _log_path):
     model = models.rpmnet.get_model(args)
     model.to(_device)
+    saver = CheckPointManager(os.path.join(_log_path, 'ckpt', 'models'))
+    saver.load(args.resume, model)
 
     return model
 
 
-def test(args, _device):
+def test(args, _device, _log_path):
     test_dataset = get_test_datasets(args)
     test_loader = torch.utils.data.DataLoader(test_dataset,
                                               batch_size=1, shuffle=True)
 
-    model = get_model(args, _device)
+    model = get_model(args, _device, _log_path)
     inference(test_loader, model, args)
 
 def compute_losses(data: Dict, pred_transforms: List, _args, endpoints: Dict,
@@ -288,7 +290,7 @@ def train(_args, _device, _logger, _log_path):
 
     _logger.debug('Trainer (PID=%d), %s', os.getpid(), _args)
 
-    model = get_model(_args, _device)
+    model = get_model(_args, _device, _log_path)
     model.to(_device)
     global_step = 0
 
