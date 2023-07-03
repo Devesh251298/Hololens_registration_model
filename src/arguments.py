@@ -65,7 +65,7 @@ def rpmnet_arguments():
                         help='Number of iterations to run for inference')
     parser.add_argument('--object_file', default="STL/Segmentation.stl", type=str, metavar='PATH',
                         help='Path to the object file to be registered. Required for inference')
-    parser.add_argument('--noise', default=True, type=bool, metavar='PATH',
+    parser.add_argument('--noise', default=False, type=bool, metavar='PATH',
                         help='Whether to add noise to the object file to be registered. Required for inference')
     parser.add_argument('--num_spheres', default=10, type=int, metavar='PATH',
                         help='Number of spheres to add to the object file to be registered. Required for inference')

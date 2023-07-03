@@ -95,6 +95,27 @@ def generate_target(source_points, ref_points, pred_transforms, data_batch):
     rpmnet = compute_metrics(transform_gt, transform)
     rpmnet_icp = compute_metrics(transform_gt, reg_p2p.transformation)
 
+    # average distance between point in result and result_gt
+    predicted_points = np.asarray(result.points)
+    predicted_icp_points = np.asarray(result_rpm_icp.points)
+    gt_points = np.asarray(result_gt.points)
+
+    dist = np.linalg.norm(predicted_points - gt_points, axis=1)
+    dist_icp = np.linalg.norm(predicted_icp_points - gt_points, axis=1)
+    avg_dist = np.mean(dist)
+    max_dist = np.max(dist)
+    min_dist = np.min(dist)
+    # print("Average distance between point in result and result_gt : ", avg_dist)
+    # print("Max distance between point in result and result_gt : ", max_dist)
+    # print("Min distance between point in result and result_gt : ", min_dist)
+
+    avg_dist_icp = np.mean(dist_icp)
+    max_dist_icp = np.max(dist_icp)
+    min_dist_icp = np.min(dist_icp)
+    # print("Average distance between point in result and result_gt : ", avg_dist_icp)
+    # print("Max distance between point in result and result_gt : ", max_dist_icp)
+    # print("Min distance between point in result and result_gt : ", min_dist_icp)
+
     print("RPMNet : ", rpmnet)
     print("RPMNet_ICP : ", rpmnet_icp)
 
