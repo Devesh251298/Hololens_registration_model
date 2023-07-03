@@ -1,3 +1,3 @@
-python eval.py --noise_type crop --resume models/model_trained_more_noise.pth --num_points 4000 --trans_mag 0.5 --num_reg_iter 20
+python eval.py 
 
-python train.py --noise_type jitter --train_batch_size 4 --resume models/model_trained_noise.pth
+python train.py
