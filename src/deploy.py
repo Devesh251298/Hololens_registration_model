@@ -30,10 +30,10 @@ def predict():
     data = request.json  # Get the input data from the request
     # Perform any necessary preprocessing on the input data
     # Convert the input data to a PyTorch tensor
-    input_tensor = torch.tensor(data["image"])
+    input_tensor = torch.tensor(data["data_batch"])
     # Run inference on the model
     with torch.no_grad():
-        output_tensor = model(input_tensor)
+        output_tensor = model(input_tensor, args.num_reg_iter)
     # Convert the output tensor to a Python list
     output = output_tensor.tolist()
     # Create a response dictionary with the model's predictions
