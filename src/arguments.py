@@ -201,6 +201,13 @@ def rpmnet_arguments():
         metavar="PATH",
         help="Number of spheres to add to the object file to be registered. Required for inference",
     )
+    parser.add_argument(
+        "--mesh",
+        default=False,
+        type=bool,
+        metavar="PATH",
+        help="Whether to use mesh or point cloud for inference",
+    )
     return parser
 
 

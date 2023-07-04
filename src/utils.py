@@ -14,6 +14,7 @@ from common.math.so3 import dcm2euler
 from common.torch import dict_all_to_device, CheckPointManager, TorchDebugger
 from data_loader.datasets import get_source, generate_data
 import models.rpmnet
+import trimesh
 
 
 def compute_metrics(transform_gt, pred_transforms) -> Dict:
@@ -46,6 +47,20 @@ def compute_metrics(transform_gt, pred_transforms) -> Dict:
         metrics = {"r_mse": r_mse, "r_mae": r_mae, "t_mse": t_mse, "t_mae": t_mae}
 
     return metrics
+
+
+def get_mesh(point_cloud):
+    point_cloud.estimate_normals()
+    # estimate radius for rolling ball
+    distances = point_cloud.compute_nearest_neighbor_distance()
+    avg_dist = np.mean(distances)
+    radius = 1.5 * avg_dist   
+
+    mesh = o3.geometry.TriangleMesh.create_from_point_cloud_ball_pivoting(
+            point_cloud,
+            o3.utility.DoubleVector([radius, radius * 2]))
+
+    return mesh
 
 
 def generate_target(source_points, ref_points, pred_transforms, data_batch):
@@ -181,7 +196,7 @@ def inference(model: torch.nn.Module, args):
         rpm_icp_stats.append({data_batch["category"][0]: rpmnet_icp})
 
         draw_registration_result(
-            source, target, result, result_gt, result_rpm_icp, vis1, vis2
+            source, target, result, result_gt, result_rpm_icp, vis1, vis2, args.mesh
         )
 
     results = {"RPMNet": rpm_stats, "RPMNet_ICP": rpm_icp_stats}
@@ -192,13 +207,21 @@ def inference(model: torch.nn.Module, args):
 
 
 def draw_registration_result(
-    source, target, result, result_gt, result_rpm_icp, vis1, vis2
+    source, target, result, result_gt, result_rpm_icp, vis1, vis2, mesh=False
 ):
+
     source.paint_uniform_color([1, 0, 0])
     target.paint_uniform_color([0, 1, 0])
     result_gt.paint_uniform_color([0, 0, 1])
     result.paint_uniform_color([0, 1, 1])
     result_rpm_icp.paint_uniform_color([0, 1, 1])
+
+    if mesh:
+        result = get_mesh(result)
+        result_gt = get_mesh(result_gt)
+        result_rpm_icp = get_mesh(result_rpm_icp)
+        source = get_mesh(source)
+        target = get_mesh(target)
 
     vis1.add_geometry(result)
     vis1.add_geometry(result_gt)
@@ -216,6 +239,7 @@ def draw_registration_result(
         vis1.update_geometry(result_gt)
         vis1.update_geometry(source)
         vis1.update_geometry(target)
+
         if not vis1.poll_events():
             break
         vis1.update_renderer()
