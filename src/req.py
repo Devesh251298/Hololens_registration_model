@@ -44,4 +44,6 @@ url = "http://localhost:5000/predict"  # Replace with your Flask route URL
 headers = {"Content-Type": "application/json"}
 response = requests.post(url, headers=headers, data=json_data)
 
-print(response.json())
+transform = np.asarray(response.json()["output"])
+transform = np.vstack((transform, np.array([0, 0, 0, 1])))
+print(transform)
