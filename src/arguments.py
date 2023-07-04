@@ -208,6 +208,20 @@ def rpmnet_arguments():
         metavar="PATH",
         help="Whether to use mesh or point cloud for inference",
     )
+    parser.add_argument(
+        "--visualize",
+        default=False,
+        type=bool,
+        metavar="PATH",
+        help="Whether to visualize the registration",
+    )
+    parser.add_argument(
+        "--save_stats",
+        default="results",
+        type=str,
+        metavar="PATH",
+        help="Path to save the registration stats",
+    )
     return parser
 
 

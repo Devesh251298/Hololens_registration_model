@@ -36,8 +36,8 @@ def compute_metrics(transform_gt, pred_transforms) -> Dict:
         # print("r_gt_euler_deg: ", r_gt_euler_deg)
         # print("r_pred_euler_deg: ", r_pred_euler_deg)
 
-        print("t_gt: ", t_gt)
-        print("t_pred: ", t_pred)
+        # print("t_gt: ", t_gt)
+        # print("t_pred: ", t_pred)
 
         r_mse = np.mean((r_gt_euler_deg - r_pred_euler_deg) ** 2, axis=1)[0]
         r_mae = np.mean(np.abs(r_gt_euler_deg - r_pred_euler_deg), axis=1)[0]
@@ -104,7 +104,6 @@ def generate_target(source_points, ref_points, pred_transforms, data_batch):
     result_rpm_icp = copy.deepcopy(source)
     result_rpm_icp.transform(reg_p2p.transformation)
     # draw_registration_result(source, target, reg_p2p.transformation)
-    print(data_batch["category"][0])
     rpmnet = compute_metrics(transform_gt, transform)
     rpmnet_icp = compute_metrics(transform_gt, reg_p2p.transformation)
 
@@ -152,11 +151,12 @@ def inference(model: torch.nn.Module, args):
     pred_transforms_all = []
     endpoints_out = defaultdict(list)
 
-    vis1 = o3.visualization.Visualizer()
-    vis1.create_window(window_name="RPMNet", width=960, height=540, left=0, top=0)
+    if args.visualize:
+        vis1 = o3.visualization.Visualizer()
+        vis1.create_window(window_name="RPMNet", width=960, height=540, left=0, top=0)
 
-    vis2 = o3.visualization.Visualizer()
-    vis2.create_window(window_name="RPMNet_ICP", width=960, height=540, left=0, top=600)
+        vis2 = o3.visualization.Visualizer()
+        vis2.create_window(window_name="RPMNet_ICP", width=960, height=540, left=0, top=600)
 
     rpm_stats = []
     rpm_icp_stats = []
@@ -192,15 +192,16 @@ def inference(model: torch.nn.Module, args):
             rpmnet_icp,
         ) = generate_target(source_points, ref_points, pred_transforms, data_batch)
 
-        rpm_stats.append({data_batch["category"][0]: rpmnet})
-        rpm_icp_stats.append({data_batch["category"][0]: rpmnet_icp})
+        rpm_stats.append({data_batch["category"]: rpmnet})
+        rpm_icp_stats.append({data_batch["category"]: rpmnet_icp})
 
-        draw_registration_result(
-            source, target, result, result_gt, result_rpm_icp, vis1, vis2, args.mesh
-        )
+        if args.visualize:
+            draw_registration_result(
+                source, target, result, result_gt, result_rpm_icp, vis1, vis2, args.mesh
+            )
 
     results = {"RPMNet": rpm_stats, "RPMNet_ICP": rpm_icp_stats}
-    with open("results/results_noisy_partial_0.8_t_4_updated.json", "w") as fp:
+    with open("results/"+args.save_stats + ".json", "w") as fp:
         json.dump(results, fp)
 
     return pred_transforms_all, endpoints_out

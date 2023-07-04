@@ -68,7 +68,7 @@ def generate_data(source, args):
     trans_mag = np.random.uniform(0, args.trans_mag)
     num_points = args.num_points
     partial_p_keep = [1, np.random.uniform(args.partial_min, 1)]
-    sample = {'points': np.concatenate((np.asarray(source.points), np.asarray(source.normals)), axis=1), 'label': 'Actual', 'idx': 4, 'category': 'person'}
+    sample = {'points': np.concatenate((np.asarray(source.points), np.asarray(source.normals)), axis=1), 'label': 'Actual', 'idx': 4, 'category': 'patient'}
 
     transforms = torchvision.transforms.Compose([Transforms.SetDeterministic(),
                                                 Transforms.SplitSourceRef(),
