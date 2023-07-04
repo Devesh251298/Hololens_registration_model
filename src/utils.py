@@ -224,19 +224,19 @@ def draw_registration_result(
         target = get_mesh(target)
 
     vis1.add_geometry(result)
-    vis1.add_geometry(result_gt)
+    # vis1.add_geometry(result_gt)
     vis1.add_geometry(source)
     vis1.add_geometry(target)
 
     vis2.add_geometry(result_rpm_icp)
-    vis2.add_geometry(result_gt)
+    # vis2.add_geometry(result_gt)
     vis2.add_geometry(source)
     vis2.add_geometry(target)
 
     count = 0
     while count < 1000:
         vis1.update_geometry(result)
-        vis1.update_geometry(result_gt)
+        # vis1.update_geometry(result_gt)
         vis1.update_geometry(source)
         vis1.update_geometry(target)
 
@@ -245,7 +245,7 @@ def draw_registration_result(
         vis1.update_renderer()
 
         vis2.update_geometry(result)
-        vis2.update_geometry(result_gt)
+        # vis2.update_geometry(result_gt)
         vis2.update_geometry(source)
         vis2.update_geometry(target)
         if not vis2.poll_events():
