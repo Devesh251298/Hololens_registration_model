@@ -14,16 +14,18 @@ from utils import test
 from common.misc import prepare_logger
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     # Arguments and logging
     parser = rpmnet_eval_arguments()
     args = parser.parse_args()
     logger, log_path = prepare_logger(args)
-    os.environ['CUDA_VISIBLE_DEVICES'] = str(args.gpu)
-    if args.gpu >= 0 and (args.method == 'rpm' or args.method == 'rpmnet'):
-        os.environ['CUDA_VISIBLE_DEVICES'] = str(args.gpu)
-        device = torch.device('cuda:0') if torch.cuda.is_available() else torch.device('cpu')
+    os.environ["CUDA_VISIBLE_DEVICES"] = str(args.gpu)
+    if args.gpu >= 0 and (args.method == "rpm" or args.method == "rpmnet"):
+        os.environ["CUDA_VISIBLE_DEVICES"] = str(args.gpu)
+        device = (
+            torch.device("cuda:0") if torch.cuda.is_available() else torch.device("cpu")
+        )
     else:
-        device = torch.device('cpu')
-    device = torch.device('cpu')
+        device = torch.device("cpu")
+    device = torch.device("cpu")
     test(args, device, log_path)

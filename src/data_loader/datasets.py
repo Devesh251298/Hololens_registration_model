@@ -6,6 +6,7 @@ import copy
 import numpy as np
 import open3d as o3d
 import torchvision
+import torch
 
 import data_loader.transforms as Transforms
 
@@ -78,5 +79,11 @@ def generate_data(source, args):
                                                 Transforms.ShufflePoints(args)])
 
     data_batch = transforms(sample)
+
+    data_batch['points_src'] = torch.from_numpy(data_batch['points_src']).float().cpu()
+    data_batch['points_ref'] = torch.from_numpy(data_batch['points_ref']).float().cpu()
+
+    data_batch['points_src'] = data_batch['points_src'].unsqueeze(0)
+    data_batch['points_ref'] = data_batch['points_ref'].unsqueeze(0)
 
     return data_batch

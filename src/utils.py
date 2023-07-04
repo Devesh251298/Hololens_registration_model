@@ -2,7 +2,7 @@ from collections import defaultdict
 import json
 import os
 import numpy as np
-import open3d as o3 # Need to import before torch
+import open3d as o3  # Need to import before torch
 import torch
 import torch.nn as nn
 import copy
@@ -17,8 +17,7 @@ import models.rpmnet
 
 
 def compute_metrics(transform_gt, pred_transforms) -> Dict:
-    """Compute metrics required in the paper
-    """
+    """Compute metrics required in the paper"""
 
     def square_distance(src, dst):
         return torch.sum((src[:, :, None, :] - dst[:, None, :, :]) ** 2, dim=-1)
@@ -29,8 +28,8 @@ def compute_metrics(transform_gt, pred_transforms) -> Dict:
 
         # Euler angles, Individual translation errors (Deep Closest Point convention)
         # TODO Change rotation to torch operations
-        r_gt_euler_deg = dcm2euler(gt_transforms[:3, :3], seq='xyz')
-        r_pred_euler_deg = dcm2euler(pred_transforms[:3, :3].copy(), seq='xyz')
+        r_gt_euler_deg = dcm2euler(gt_transforms[:3, :3], seq="xyz")
+        r_pred_euler_deg = dcm2euler(pred_transforms[:3, :3].copy(), seq="xyz")
         t_gt = gt_transforms[:3, 3]
         t_pred = pred_transforms[:3, 3].copy()
         # print("r_gt_euler_deg: ", r_gt_euler_deg)
@@ -44,12 +43,7 @@ def compute_metrics(transform_gt, pred_transforms) -> Dict:
         t_mse = np.mean((t_gt - t_pred) ** 2)
         t_mae = np.mean(np.abs(t_gt - t_pred))
 
-        metrics = {
-            'r_mse': r_mse,
-            'r_mae': r_mae,
-            't_mse': t_mse,
-            't_mae': t_mae
-        }
+        metrics = {"r_mse": r_mse, "r_mae": r_mae, "t_mse": t_mse, "t_mae": t_mae}
 
     return metrics
 
@@ -77,21 +71,25 @@ def generate_target(source_points, ref_points, pred_transforms, data_batch):
 
     result = copy.deepcopy(source)
     result.transform(transform)
-    gt_transforms = data_batch['transform_gt']
+    gt_transforms = data_batch["transform_gt"]
     transform_gt = gt_transforms
     transform_gt = np.vstack((transform_gt, np.array([0, 0, 0, 1])))
     result_gt = copy.deepcopy(source)
     result_gt.transform(transform_gt)
 
     reg_p2p = o3.pipelines.registration.registration_icp(
-        source, target, 0.02, transform,
+        source,
+        target,
+        0.02,
+        transform,
         o3.pipelines.registration.TransformationEstimationPointToPoint(),
-        o3.pipelines.registration.ICPConvergenceCriteria(max_iteration = 200))
+        o3.pipelines.registration.ICPConvergenceCriteria(max_iteration=200),
+    )
 
     result_rpm_icp = copy.deepcopy(source)
     result_rpm_icp.transform(reg_p2p.transformation)
     # draw_registration_result(source, target, reg_p2p.transformation)
-    print(data_batch['category'][0])
+    print(data_batch["category"][0])
     rpmnet = compute_metrics(transform_gt, transform)
     rpmnet_icp = compute_metrics(transform_gt, reg_p2p.transformation)
 
@@ -140,10 +138,10 @@ def inference(model: torch.nn.Module, args):
     endpoints_out = defaultdict(list)
 
     vis1 = o3.visualization.Visualizer()
-    vis1.create_window(window_name='RPMNet', width=960, height=540, left=0, top=0)
+    vis1.create_window(window_name="RPMNet", width=960, height=540, left=0, top=0)
 
     vis2 = o3.visualization.Visualizer()
-    vis2.create_window(window_name='RPMNet_ICP', width=960, height=540, left=0, top=600)
+    vis2.create_window(window_name="RPMNet_ICP", width=960, height=540, left=0, top=600)
 
     rpm_stats = []
     rpm_icp_stats = []
@@ -155,36 +153,47 @@ def inference(model: torch.nn.Module, args):
         source = copy.deepcopy(source_global)
         data_batch = generate_data(source, args)
 
-        data_batch['points_src'] = torch.from_numpy(data_batch['points_src']).float().cpu()
-        data_batch['points_ref'] = torch.from_numpy(data_batch['points_ref']).float().cpu()
-
-        data_batch['points_src'] = data_batch['points_src'].unsqueeze(0)
-        data_batch['points_ref'] = data_batch['points_ref'].unsqueeze(0)
-
         with torch.no_grad():
             pred_transforms, endpoints = model(data_batch, args.num_reg_iter)
 
-        source_points = data_batch['points_src'][..., :3].cpu().detach().numpy()
-        ref_points = data_batch['points_ref'][..., :3].cpu().detach().numpy()
+        source_points = data_batch["points_src"][..., :3].cpu().detach().numpy()
+        ref_points = data_batch["points_ref"][..., :3].cpu().detach().numpy()
 
-        source_points = np.reshape(source_points, (source_points.shape[0]*source_points.shape[1],source_points.shape[2]))
-        ref_points = np.reshape(ref_points, (ref_points.shape[0]*ref_points.shape[1],ref_points.shape[2]))
+        source_points = np.reshape(
+            source_points,
+            (source_points.shape[0] * source_points.shape[1], source_points.shape[2]),
+        )
+        ref_points = np.reshape(
+            ref_points, (ref_points.shape[0] * ref_points.shape[1], ref_points.shape[2])
+        )
 
-        result, source, target, result_gt, result_rpm_icp, rpmnet, rpmnet_icp = generate_target(source_points, ref_points, pred_transforms, data_batch)
+        (
+            result,
+            source,
+            target,
+            result_gt,
+            result_rpm_icp,
+            rpmnet,
+            rpmnet_icp,
+        ) = generate_target(source_points, ref_points, pred_transforms, data_batch)
 
-        rpm_stats.append({data_batch['category'][0] : rpmnet})
-        rpm_icp_stats.append({data_batch['category'][0] : rpmnet_icp})
+        rpm_stats.append({data_batch["category"][0]: rpmnet})
+        rpm_icp_stats.append({data_batch["category"][0]: rpmnet_icp})
 
-        draw_registration_result(source, target, result, result_gt, result_rpm_icp, vis1, vis2)
+        draw_registration_result(
+            source, target, result, result_gt, result_rpm_icp, vis1, vis2
+        )
 
-    results = {'RPMNet': rpm_stats, 'RPMNet_ICP': rpm_icp_stats}
-    with open('results/results_noisy_partial_0.8_t_4_updated.json', 'w') as fp:
+    results = {"RPMNet": rpm_stats, "RPMNet_ICP": rpm_icp_stats}
+    with open("results/results_noisy_partial_0.8_t_4_updated.json", "w") as fp:
         json.dump(results, fp)
 
     return pred_transforms_all, endpoints_out
 
 
-def draw_registration_result(source, target, result, result_gt, result_rpm_icp, vis1, vis2):
+def draw_registration_result(
+    source, target, result, result_gt, result_rpm_icp, vis1, vis2
+):
     source.paint_uniform_color([1, 0, 0])
     target.paint_uniform_color([0, 1, 0])
     result_gt.paint_uniform_color([0, 0, 1])
@@ -228,7 +237,7 @@ def draw_registration_result(source, target, result, result_gt, result_rpm_icp, 
 def get_model(args, device, log_path):
     model = models.rpmnet.get_model(args)
     model.to(device)
-    saver = CheckPointManager(os.path.join(log_path, 'ckpt', 'models'))
+    saver = CheckPointManager(os.path.join(log_path, "ckpt", "models"))
     saver.load(args.resume, model)
 
     return model
@@ -239,8 +248,14 @@ def test(args, device, log_path):
     inference(model, args)
 
 
-def compute_losses(data: Dict, pred_transforms: List, args, endpoints: Dict,
-                   loss_type: str = 'mae', reduction: str = 'mean') -> Dict:
+def compute_losses(
+    data: Dict,
+    pred_transforms: List,
+    args,
+    endpoints: Dict,
+    loss_type: str = "mae",
+    reduction: str = "mean",
+) -> Dict:
     """Compute losses
 
     Args:
@@ -261,49 +276,68 @@ def compute_losses(data: Dict, pred_transforms: List, args, endpoints: Dict,
 
     # Compute losses
     # extend dimension to 1 x 4 x 4 which is a numpy array
-    data['transform_gt'] = np.expand_dims(data['transform_gt'], axis=0)
-    data['transform_gt'] = torch.from_numpy(data['transform_gt']).float()
+    data["transform_gt"] = np.expand_dims(data["transform_gt"], axis=0)
+    data["transform_gt"] = torch.from_numpy(data["transform_gt"]).float()
 
-    gt_src_transformed = se3.transform(data['transform_gt'], data['points_src'][..., :3])
-    if loss_type == 'mse':
+    gt_src_transformed = se3.transform(
+        data["transform_gt"], data["points_src"][..., :3]
+    )
+    if loss_type == "mse":
         # MSE loss to the groundtruth (does not take into account possible symmetries)
         criterion = nn.MSELoss(reduction=reduction)
         for i in range(num_iter):
-            pred_src_transformed = se3.transform(pred_transforms[i], data['points_src'][..., :3])
-            if reduction.lower() == 'mean':
-                losses['mse_{}'.format(i)] = criterion(pred_src_transformed, gt_src_transformed)
-            elif reduction.lower() == 'none':
-                losses['mse_{}'.format(i)] = torch.mean(criterion(pred_src_transformed, gt_src_transformed),
-                                                        dim=[-1, -2])
-    elif loss_type == 'mae':
+            pred_src_transformed = se3.transform(
+                pred_transforms[i], data["points_src"][..., :3]
+            )
+            if reduction.lower() == "mean":
+                losses["mse_{}".format(i)] = criterion(
+                    pred_src_transformed, gt_src_transformed
+                )
+            elif reduction.lower() == "none":
+                losses["mse_{}".format(i)] = torch.mean(
+                    criterion(pred_src_transformed, gt_src_transformed), dim=[-1, -2]
+                )
+    elif loss_type == "mae":
         # MSE loss to the groundtruth (does not take into account possible symmetries)
         criterion = nn.L1Loss(reduction=reduction)
         for i in range(num_iter):
-            pred_src_transformed = se3.transform(pred_transforms[i], data['points_src'][..., :3])
-            if reduction.lower() == 'mean':
-                losses['mae_{}'.format(i)] = criterion(pred_src_transformed, gt_src_transformed)
-            elif reduction.lower() == 'none':
-                losses['mae_{}'.format(i)] = torch.mean(criterion(pred_src_transformed, gt_src_transformed),
-                                                        dim=[-1, -2])
+            pred_src_transformed = se3.transform(
+                pred_transforms[i], data["points_src"][..., :3]
+            )
+            if reduction.lower() == "mean":
+                losses["mae_{}".format(i)] = criterion(
+                    pred_src_transformed, gt_src_transformed
+                )
+            elif reduction.lower() == "none":
+                losses["mae_{}".format(i)] = torch.mean(
+                    criterion(pred_src_transformed, gt_src_transformed), dim=[-1, -2]
+                )
     else:
         raise NotImplementedError
 
     # Penalize outliers
     for i in range(num_iter):
-        ref_outliers_strength = (1.0 - torch.sum(endpoints['perm_matrices'][i], dim=1)) * args.wt_inliers
-        src_outliers_strength = (1.0 - torch.sum(endpoints['perm_matrices'][i], dim=2)) * args.wt_inliers
-        if reduction.lower() == 'mean':
-            losses['outlier_{}'.format(i)] = torch.mean(ref_outliers_strength) + torch.mean(src_outliers_strength)
-        elif reduction.lower() == 'none':
-            losses['outlier_{}'.format(i)] = torch.mean(ref_outliers_strength, dim=1) + \
-                                             torch.mean(src_outliers_strength, dim=1)
+        ref_outliers_strength = (
+            1.0 - torch.sum(endpoints["perm_matrices"][i], dim=1)
+        ) * args.wt_inliers
+        src_outliers_strength = (
+            1.0 - torch.sum(endpoints["perm_matrices"][i], dim=2)
+        ) * args.wt_inliers
+        if reduction.lower() == "mean":
+            losses["outlier_{}".format(i)] = torch.mean(
+                ref_outliers_strength
+            ) + torch.mean(src_outliers_strength)
+        elif reduction.lower() == "none":
+            losses["outlier_{}".format(i)] = torch.mean(
+                ref_outliers_strength, dim=1
+            ) + torch.mean(src_outliers_strength, dim=1)
 
     discount_factor = 0.5  # Early iterations will be discounted
     total_losses = []
     for k in losses:
-        discount = discount_factor ** (num_iter - int(k[k.rfind('_')+1:]) - 1)
+        discount = discount_factor ** (num_iter - int(k[k.rfind("_") + 1 :]) - 1)
         total_losses.append(losses[k] * discount)
-    losses['total'] = torch.sum(torch.stack(total_losses), dim=0)
+    losses["total"] = torch.sum(torch.stack(total_losses), dim=0)
 
     return losses
 
@@ -311,7 +345,7 @@ def compute_losses(data: Dict, pred_transforms: List, args, endpoints: Dict,
 def train(args, device, logger, log_path):
     """Main train/val loop"""
 
-    logger.debug('Trainer (PID=%d), %s', os.getpid(), args)
+    logger.debug("Trainer (PID=%d), %s", os.getpid(), args)
 
     model = get_model(args, device, log_path)
     model.to(device)
@@ -320,7 +354,9 @@ def train(args, device, logger, log_path):
     # optimizer
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
 
-    saver = CheckPointManager(os.path.join(log_path, 'ckpt', 'model'), keep_checkpoint_every_n_hours=0.5)
+    saver = CheckPointManager(
+        os.path.join(log_path, "ckpt", "model"), keep_checkpoint_every_n_hours=0.5
+    )
     if args.resume is not None:
         global_step = saver.load(args.resume, model, optimizer)
 
@@ -335,30 +371,33 @@ def train(args, device, logger, log_path):
         for i in range(args.iterations):
             train_data = generate_data(source, args)
 
-            train_data['points_src'] = torch.from_numpy(train_data['points_src']).float().cpu()
-            train_data['points_ref'] = torch.from_numpy(train_data['points_ref']).float().cpu()
-
-            train_data['points_src'] = train_data['points_src'].unsqueeze(0)
-            train_data['points_ref'] = train_data['points_ref'].unsqueeze(0)
             global_step += 1
 
             optimizer.zero_grad()
 
             # Forward through neural network
             dict_all_to_device(train_data, device)
-            pred_transforms, endpoints = model(train_data, args.num_train_reg_iter)  # Use less iter during training
+            pred_transforms, endpoints = model(
+                train_data, args.num_train_reg_iter
+            )  # Use less iter during training
 
             # Compute loss, and optimize
-            train_losses = compute_losses(train_data, pred_transforms, args, endpoints,
-                                          loss_type=args.loss_type, reduction='mean')
+            train_losses = compute_losses(
+                train_data,
+                pred_transforms,
+                args,
+                endpoints,
+                loss_type=args.loss_type,
+                reduction="mean",
+            )
             if args.debug:
                 with TorchDebugger():
-                    train_losses['total'].backward()
+                    train_losses["total"].backward()
             else:
-                train_losses['total'].backward()
+                train_losses["total"].backward()
             optimizer.step()
 
-            tbar.set_description('Loss:{:.3g}'.format(train_losses['total']))
+            tbar.set_description("Loss:{:.3g}".format(train_losses["total"]))
             tbar.update(1)
 
             # if global_step % args.validate_every == 0:  # Validation loop. Also saves checkpoints
