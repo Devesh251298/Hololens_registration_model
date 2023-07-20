@@ -182,7 +182,7 @@ def rpmnet_arguments():
     )
     parser.add_argument(
         "--object_file",
-        default="STL/Segmentation.stl",
+        default="STL/Segmentation_skin.stl",
         type=str,
         metavar="PATH",
         help="Path to the object file to be registered. Required for inference",
