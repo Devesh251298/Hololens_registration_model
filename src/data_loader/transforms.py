@@ -7,9 +7,12 @@ from scipy.stats import special_ortho_group
 import torch
 import torch.utils.data
 
-from common.math.random import uniform_2_sphere
+from common.math.random import uniform_2_sphere, uniform_2_plane, create_3d_plane
 import common.math.se3 as se3
 import common.math.so3 as so3
+
+plane_global = []
+center_global = []
 
 
 class SplitSourceRef:
@@ -100,7 +103,7 @@ class FixedResampler(Resampler):
 
 class RandomJitter:
     """ generate perturbations """
-    def __init__(self, scale=0.01, clip=0.05):
+    def __init__(self, scale=0.3, clip=0.05):
         self.scale = scale
         self.clip = clip
 
@@ -138,14 +141,22 @@ class RandomCrop:
     @staticmethod
     def crop(points, p_keep):
         rand_xyz = uniform_2_sphere()
+        global plane_global
+        plane_global = rand_xyz
         centroid = np.mean(points[:, :3], axis=0)
         points_centered = points[:, :3] - centroid
 
         dist_from_plane = np.dot(points_centered, rand_xyz)
-        if p_keep == 0.5:
-            mask = dist_from_plane > 0
-        else:
-            mask = dist_from_plane > np.percentile(dist_from_plane, (1.0 - p_keep) * 100)
+
+        # if p_keep == 0.5:
+        #     mask = dist_from_plane > 0
+        # else:
+        mask = dist_from_plane > np.percentile(dist_from_plane, (1.0 - p_keep) * 100)
+        global center_global
+        # store the point with distnce to plane is minimum
+        point_masked = points[mask, :]
+        dist_from_plane = np.dot(point_masked[:, :3], rand_xyz)
+        center_global = point_masked[np.argmin(dist_from_plane), :3]
 
         return points[mask, :]
 
@@ -158,11 +169,11 @@ class RandomCrop:
         if 'deterministic' in sample and sample['deterministic']:
             np.random.seed(sample['idx'])
 
-        if len(self.p_keep) == 1:
-            sample['points_src'] = self.crop(sample['points_src'], self.p_keep[0])
-        else:
-            sample['points_src'] = self.crop(sample['points_src'], self.p_keep[0])
-            sample['points_ref'] = self.crop(sample['points_ref'], self.p_keep[1])
+        # if len(self.p_keep) == 1:
+        #     sample['points_src'] = self.crop(sample['points_src'], self.p_keep[0])
+        # else:
+            # sample['points_src'] = self.crop(sample['points_src'], self.p_keep[0])
+        sample['points_ref'] = self.crop(sample['points_ref'], self.p_keep[0])
         return sample
 
 
@@ -253,12 +264,19 @@ class RandomTransformSE3_euler(RandomTransformSE3):
         angley = np.random.uniform() * np.pi * rot_mag / 180.0
         anglez = np.random.uniform() * np.pi * rot_mag / 180.0
 
+        anglex_deg = anglex * 180.0 / np.pi
+        angley_deg = angley * 180.0 / np.pi
+        anglez_deg = anglez * 180.0 / np.pi
+
+        print("anglex_deg: ", anglex_deg, "angley_deg: ", angley_deg, "anglez_deg: ", anglez_deg)
+
         cosx = np.cos(anglex)
         cosy = np.cos(angley)
         cosz = np.cos(anglez)
         sinx = np.sin(anglex)
         siny = np.sin(angley)
         sinz = np.sin(anglez)
+
         Rx = np.array([[1, 0, 0],
                        [0, cosx, -sinx],
                        [0, sinx, cosx]])
@@ -314,6 +332,22 @@ class ShufflePoints:
                 sphere = np.concatenate((sphere, sphere[:, :3]), axis=1)
                 sphere = sphere.astype(sample['points_ref'].dtype)
                 sample['points_ref'] = np.concatenate((sample['points_ref'], sphere), axis=0)
+
+        num_planes = 1
+        plane = np.zeros((0, 3))
+        global plane_global
+        global center_global
+        normal = plane_global
+
+        print("Center " + str(center_global) + " Normal " + str(normal))
+
+        for i in range(num_planes):
+            plane = np.concatenate((plane, create_3d_plane(normal, center_global, 1000)), axis=0)
+
+        plane = np.concatenate((plane, plane[:, :3]), axis=1)
+        plane = plane.astype(sample['points_ref'].dtype)
+        sample['points_ref'] = np.concatenate((sample['points_ref'], plane), axis=0)
+
         return sample
 
 

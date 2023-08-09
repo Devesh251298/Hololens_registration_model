@@ -50,7 +50,6 @@ def rpmnet_arguments():
     parser.add_argument(
         "--noise_type",
         default="crop",
-        choices=["clean", "jitter", "crop"],
         help="Types of perturbation to consider",
     )
     parser.add_argument(
@@ -62,7 +61,7 @@ def rpmnet_arguments():
     )
     parser.add_argument(
         "--trans_mag",
-        default=5,
+        default=1,
         type=float,
         metavar="T",
         help="Maximum magnitude of translation perturbation",
@@ -161,7 +160,7 @@ def rpmnet_arguments():
     )
     parser.add_argument(
         "--resume",
-        default="models/model-translation.pth",
+        default="models/model_best_yet.pth",
         type=str,
         metavar="PATH",
         help="Pretrained network to load from. Optional for train, required for inference.",
@@ -175,7 +174,7 @@ def rpmnet_arguments():
     )
     parser.add_argument(
         "--iterations",
-        default=100,
+        default=500,
         type=int,
         metavar="N",
         help="Number of iterations to run for inference",
@@ -188,6 +187,20 @@ def rpmnet_arguments():
         help="Path to the object file to be registered. Required for inference",
     )
     parser.add_argument(
+        "--target_file",
+        default="STL/Segmentation_skin.stl",
+        type=str,
+        metavar="PATH",
+        help="Path to the target file to be registered. Required for inference",
+    )
+    parser.add_argument(
+        "--simulated",
+        default=False,
+        type=bool,
+        metavar="PATH",
+        help="Whether to use simulated data for inference",
+    )
+    parser.add_argument(
         "--noise",
         default=False,
         type=bool,
@@ -197,6 +210,13 @@ def rpmnet_arguments():
     parser.add_argument(
         "--num_spheres",
         default=10,
+        type=int,
+        metavar="PATH",
+        help="Number of spheres to add to the object file to be registered. Required for inference",
+    )
+    parser.add_argument(
+        "--num_planes",
+        default=2,
         type=int,
         metavar="PATH",
         help="Number of spheres to add to the object file to be registered. Required for inference",

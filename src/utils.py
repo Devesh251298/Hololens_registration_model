@@ -161,12 +161,20 @@ def inference(model: torch.nn.Module, args):
     rpm_stats = []
     rpm_icp_stats = []
 
-    source = get_source(args.object_file)
+    source = get_source(args.object_file, "source", args)
+    if args.simulated:
+        target = get_source(args.object_file, "target", args)
+    else:
+        target = get_source(args.target_file, "target", args)
+    print("Source points : ", len(source.points), "Target points : ", len(target.points))
+    print("Source normals : ", len(source.normals), "Target normals : ", len(target.normals))
     source_global = copy.deepcopy(source)
+    target_global = copy.deepcopy(target)
 
     for i in range(args.iterations):
         source = copy.deepcopy(source_global)
-        data_batch = generate_data(source, args)
+        target = copy.deepcopy(target_global)
+        data_batch = generate_data(source, target, args)
 
         with torch.no_grad():
             pred_transforms, endpoints = model(data_batch, args.num_reg_iter)
@@ -211,11 +219,11 @@ def draw_registration_result(
     source, target, result, result_gt, result_rpm_icp, vis1, vis2, mesh=False
 ):
 
-    source.paint_uniform_color([1, 0, 0])
-    target.paint_uniform_color([0, 1, 0])
+    source.paint_uniform_color([1, 0, 1])
+    # target.paint_uniform_color([0, 1, 0])
     result_gt.paint_uniform_color([0, 0, 1])
-    result.paint_uniform_color([0, 1, 1])
-    result_rpm_icp.paint_uniform_color([0, 1, 1])
+    result.paint_uniform_color([1, 0, 0])
+    result_rpm_icp.paint_uniform_color([1, 0, 0])
 
     if mesh:
         result = get_mesh(result)
@@ -236,7 +244,7 @@ def draw_registration_result(
 
     count = 0
     while count < 1000:
-        vis1.update_geometry(result)
+        # vis1.update_geometry(result)
         # vis1.update_geometry(result_gt)
         vis1.update_geometry(source)
         vis1.update_geometry(target)
@@ -245,7 +253,7 @@ def draw_registration_result(
             break
         vis1.update_renderer()
 
-        vis2.update_geometry(result)
+        # vis2.update_geometry(result)
         # vis2.update_geometry(result_gt)
         vis2.update_geometry(source)
         vis2.update_geometry(target)
@@ -389,12 +397,13 @@ def train(args, device, logger, log_path):
     torch.autograd.set_detect_anomaly(args.debug)
     model.train()
 
-    source = get_source(args.object_file)
+    source = get_source(args.object_file, "source", args)
+    target = get_source(args.object_file, "target", args)
 
     for epoch in range(0, args.epochs):
         tbar = tqdm(total=args.iterations, ncols=args.iterations)
         for i in range(args.iterations):
-            train_data = generate_data(source, args)
+            train_data = generate_data(source, target, args)
 
             global_step += 1
 
