@@ -312,18 +312,18 @@ def draw_registration_result(
 
     if args.save_mesh:
         vis1.capture_depth_point_cloud(
-            "results_mesh/" + "_rpmnet" + str(i) + ".ply", do_render=True
+            "results_mesh/" + "_rpmnet2" + str(i) + ".ply", do_render=True
         )
         vis2.capture_depth_point_cloud(
-            "results_mesh/" + "_rpmnet_icp" + str(i) + ".ply", do_render=True
+            "results_mesh/" + "_rpmnet_icp2" + str(i) + ".ply", do_render=True
         )
 
     if args.capture_rgb:
         vis1.capture_screen_image(
-            "results_rgb/" + "_rpmnet" + str(i) + ".png", do_render=True
+            "results_rgb/" + "_rpmnet2" + str(i) + ".png", do_render=True
         )
         vis2.capture_screen_image(
-            "results_rgb/" + "_rpmnet_icp" + str(i) + ".png", do_render=True
+            "results_rgb/" + "_rpmnet_icp2" + str(i) + ".png", do_render=True
         )
 
     vis1.clear_geometries()
