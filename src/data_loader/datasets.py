@@ -50,11 +50,13 @@ def get_source(filename: str, type: str = "source", args=None):
         pcd = pcd.uniform_down_sample(every_k_points=300)
     else:
         if type == "target":
-            pcd = pcd.uniform_down_sample(every_k_points=5)
+            pcd = pcd.uniform_down_sample(every_k_points=2)
         else:
             pcd = pcd.uniform_down_sample(every_k_points=200)
 
     source = copy.deepcopy(pcd)
+    if np.asarray(source.colors).shape[0] == 0:
+        source.colors = o3d.utility.Vector3dVector(np.zeros(np.asarray(source.points).shape))
     source.remove_non_finite_points()
 
     source_points = np.asarray(source.points)
@@ -79,8 +81,8 @@ def generate_data(source, target, args):
     partial_p_keep = [1, np.random.uniform(args.partial_min, 1)]
     # print(np.asarray(source.points).shape, np.asarray(source.normals).shape)
     # print(np.asarray(target.points).shape, np.asarray(target.normals).shape)
-    sample = {'points': np.concatenate((np.asarray(source.points), np.asarray(source.normals)), axis=1), 'label': 'Actual', 'idx': 4, 'category': 'patient'}
-    sample2 = {'points': np.concatenate((np.asarray(target.points), np.asarray(target.normals)), axis=1), 'label': 'Actual', 'idx': 4, 'category': 'patient'}
+    sample = {'points': np.concatenate((np.asarray(source.points), np.asarray(source.normals), np.asarray(source.colors)), axis=1), 'label': 'Actual', 'idx': 4, 'category': 'patient'}
+    sample2 = {'points': np.concatenate((np.asarray(target.points), np.asarray(target.normals), np.asarray(target.colors)), axis=1), 'label': 'Actual', 'idx': 4, 'category': 'patient'}
 
     # if args.simulated:
     transforms1 = torchvision.transforms.Compose([

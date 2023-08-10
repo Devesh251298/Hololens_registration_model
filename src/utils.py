@@ -63,9 +63,10 @@ def get_mesh(point_cloud):
     return mesh
 
 
-def generate_target(source_points, ref_points, pred_transforms, data_batch):
+def generate_target(source_points, ref_points, pred_transforms, data_batch, source_color, ref_color):
     pcd = o3.geometry.PointCloud()
     pcd.points = o3.utility.Vector3dVector(source_points)
+    pcd.colors = o3.utility.Vector3dVector(source_color)
     o3.io.write_point_cloud("sync.ply", pcd)
 
     source = o3.io.read_point_cloud("sync.ply")
@@ -73,6 +74,7 @@ def generate_target(source_points, ref_points, pred_transforms, data_batch):
 
     pcd = o3.geometry.PointCloud()
     pcd.points = o3.utility.Vector3dVector(ref_points)
+    pcd.colors = o3.utility.Vector3dVector(ref_color)
     o3.io.write_point_cloud("sync1.ply", pcd)
 
     target = o3.io.read_point_cloud("sync1.ply")
@@ -166,8 +168,8 @@ def inference(model: torch.nn.Module, args):
         target = get_source(args.object_file, "target", args)
     else:
         target = get_source(args.target_file, "target", args)
-    print("Source points : ", len(source.points), "Target points : ", len(target.points))
-    print("Source normals : ", len(source.normals), "Target normals : ", len(target.normals))
+    # print("Source points : ", len(source.points), "Target points : ", len(target.points))
+    # print("Source normals : ", len(source.normals), "Target normals : ", len(target.normals))
     source_global = copy.deepcopy(source)
     target_global = copy.deepcopy(target)
 
@@ -175,6 +177,14 @@ def inference(model: torch.nn.Module, args):
         source = copy.deepcopy(source_global)
         target = copy.deepcopy(target_global)
         data_batch = generate_data(source, target, args)
+
+        source_colors = data_batch["points_src"][..., 6:].cpu().detach().numpy().copy()
+        ref_colors = data_batch["points_ref"][..., 6:].cpu().detach().numpy().copy()
+
+        data_batch["points_src"] = data_batch["points_src"][..., :6]
+        data_batch["points_ref"] = data_batch["points_ref"][..., :6]
+
+        # print(data_batch["points_src"].shape, data_batch["points_ref"].shape)
 
         with torch.no_grad():
             pred_transforms, endpoints = model(data_batch, args.num_reg_iter)
@@ -190,6 +200,14 @@ def inference(model: torch.nn.Module, args):
             ref_points, (ref_points.shape[0] * ref_points.shape[1], ref_points.shape[2])
         )
 
+        source_colors = np.reshape(
+            source_colors,
+            (source_colors.shape[0] * source_colors.shape[1], source_colors.shape[2]),
+        )
+        ref_colors = np.reshape(
+            ref_colors, (ref_colors.shape[0] * ref_colors.shape[1], ref_colors.shape[2])
+        )
+
         (
             result,
             source,
@@ -198,14 +216,14 @@ def inference(model: torch.nn.Module, args):
             result_rpm_icp,
             rpmnet,
             rpmnet_icp,
-        ) = generate_target(source_points, ref_points, pred_transforms, data_batch)
+        ) = generate_target(source_points, ref_points, pred_transforms, data_batch, source_colors, ref_colors)
 
         rpm_stats.append({data_batch["category"]: rpmnet})
         rpm_icp_stats.append({data_batch["category"]: rpmnet_icp})
 
         if args.visualize:
             draw_registration_result(
-                source, target, result, result_gt, result_rpm_icp, vis1, vis2, args.mesh
+                source, target, result, result_gt, result_rpm_icp, vis1, vis2, args.mesh, args, i
             )
 
     results = {"RPMNet": rpm_stats, "RPMNet_ICP": rpm_icp_stats}
@@ -216,7 +234,7 @@ def inference(model: torch.nn.Module, args):
 
 
 def draw_registration_result(
-    source, target, result, result_gt, result_rpm_icp, vis1, vis2, mesh=False
+    source, target, result, result_gt, result_rpm_icp, vis1, vis2, mesh=False, args=None, i=0
 ):
 
     source.paint_uniform_color([1, 0, 1])
@@ -243,7 +261,7 @@ def draw_registration_result(
     vis2.add_geometry(target)
 
     count = 0
-    while count < 1000:
+    while count < 2000:
         # vis1.update_geometry(result)
         # vis1.update_geometry(result_gt)
         vis1.update_geometry(source)
@@ -262,6 +280,14 @@ def draw_registration_result(
         vis2.update_renderer()
 
         count += 1
+
+    if args.save_mesh:
+        vis1.capture_depth_point_cloud("results_mesh/" + "_rpmnet" + str(i) + ".ply", do_render=True)
+        vis2.capture_depth_point_cloud("results_mesh/" + "_rpmnet_icp" + str(i) + ".ply", do_render=True)
+
+    if args.capture_rgb:
+        vis1.capture_screen_image("results_rgb/" + "_rpmnet" + str(i) + ".png", do_render=True)
+        vis2.capture_screen_image("results_rgb/" + "_rpmnet_icp" + str(i) + ".png", do_render=True)
 
     vis1.clear_geometries()
     vis2.clear_geometries()

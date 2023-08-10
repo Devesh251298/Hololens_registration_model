@@ -215,9 +215,9 @@ class RandomTransformSE3:
 
     def apply_transform(self, p0, transform_mat):
         p1 = se3.transform(transform_mat, p0[:, :3])
-        if p0.shape[1] == 6:  # Need to rotate normals also
+        if p0.shape[1] == 9:  # Need to rotate normals also
             n1 = so3.transform(transform_mat[:3, :3], p0[:, 3:6])
-            p1 = np.concatenate((p1, n1), axis=-1)
+            p1 = np.concatenate((p1, n1, p0[:, 6:]), axis=-1)
 
         igt = transform_mat
         gt = se3.inverse(igt)
@@ -267,8 +267,6 @@ class RandomTransformSE3_euler(RandomTransformSE3):
         anglex_deg = anglex * 180.0 / np.pi
         angley_deg = angley * 180.0 / np.pi
         anglez_deg = anglez * 180.0 / np.pi
-
-        print("anglex_deg: ", anglex_deg, "angley_deg: ", angley_deg, "anglez_deg: ", anglez_deg)
 
         cosx = np.cos(anglex)
         cosy = np.cos(angley)
@@ -339,14 +337,12 @@ class ShufflePoints:
         global center_global
         normal = plane_global
 
-        print("Center " + str(center_global) + " Normal " + str(normal))
-
         for i in range(num_planes):
             plane = np.concatenate((plane, create_3d_plane(normal, center_global, 1000)), axis=0)
 
         plane = np.concatenate((plane, plane[:, :3]), axis=1)
         plane = plane.astype(sample['points_ref'].dtype)
-        sample['points_ref'] = np.concatenate((sample['points_ref'], plane), axis=0)
+        # sample['points_ref'] = np.concatenate((sample['points_ref'], plane), axis=0)
 
         return sample
 

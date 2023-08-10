@@ -222,6 +222,20 @@ def rpmnet_arguments():
         help="Number of spheres to add to the object file to be registered. Required for inference",
     )
     parser.add_argument(
+        "--save_mesh",  
+        default=False,
+        type=bool,
+        metavar="PATH",
+        help="Whether to save the mesh",
+    )
+    parser.add_argument(
+        "--capture_rgb",
+        default=False,
+        type=bool,
+        metavar="PATH",
+        help="Whether to capture rgb images",
+    )
+    parser.add_argument(
         "--mesh",
         default=False,
         type=bool,
