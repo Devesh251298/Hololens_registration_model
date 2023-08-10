@@ -26,7 +26,7 @@ data_batch = generate_data(source, args)
 data_types = {}
 
 for key in data_batch.keys():
-    # know the type of data_batch[key] and if it is a tensor or numpy array, convert it to a list 
+    # know the type of data_batch[key] and if it is a tensor or numpy array, convert it to a list
     # store the types first
     data_types[key] = str(type(data_batch[key]))
     if isinstance(data_batch[key], torch.Tensor):
@@ -47,5 +47,3 @@ response = requests.post(url, headers=headers, data=json_data)
 transform = np.asarray(response.json()["output"])
 transform = np.vstack((transform, np.array([0, 0, 0, 1])))
 print(transform)
-
-

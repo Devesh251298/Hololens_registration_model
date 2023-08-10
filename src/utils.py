@@ -54,16 +54,18 @@ def get_mesh(point_cloud):
     # estimate radius for rolling ball
     distances = point_cloud.compute_nearest_neighbor_distance()
     avg_dist = np.mean(distances)
-    radius = 1.5 * avg_dist   
+    radius = 1.5 * avg_dist
 
     mesh = o3.geometry.TriangleMesh.create_from_point_cloud_ball_pivoting(
-            point_cloud,
-            o3.utility.DoubleVector([radius, radius * 2]))
+        point_cloud, o3.utility.DoubleVector([radius, radius * 2])
+    )
 
     return mesh
 
 
-def generate_target(source_points, ref_points, pred_transforms, data_batch, source_color, ref_color):
+def generate_target(
+    source_points, ref_points, pred_transforms, data_batch, source_color, ref_color
+):
     pcd = o3.geometry.PointCloud()
     pcd.points = o3.utility.Vector3dVector(source_points)
     pcd.colors = o3.utility.Vector3dVector(source_color)
@@ -158,7 +160,9 @@ def inference(model: torch.nn.Module, args):
         vis1.create_window(window_name="RPMNet", width=960, height=540, left=0, top=0)
 
         vis2 = o3.visualization.Visualizer()
-        vis2.create_window(window_name="RPMNet_ICP", width=960, height=540, left=0, top=600)
+        vis2.create_window(
+            window_name="RPMNet_ICP", width=960, height=540, left=0, top=600
+        )
 
     rpm_stats = []
     rpm_icp_stats = []
@@ -216,25 +220,50 @@ def inference(model: torch.nn.Module, args):
             result_rpm_icp,
             rpmnet,
             rpmnet_icp,
-        ) = generate_target(source_points, ref_points, pred_transforms, data_batch, source_colors, ref_colors)
+        ) = generate_target(
+            source_points,
+            ref_points,
+            pred_transforms,
+            data_batch,
+            source_colors,
+            ref_colors,
+        )
 
         rpm_stats.append({data_batch["category"]: rpmnet})
         rpm_icp_stats.append({data_batch["category"]: rpmnet_icp})
 
         if args.visualize:
             draw_registration_result(
-                source, target, result, result_gt, result_rpm_icp, vis1, vis2, args.mesh, args, i
+                source,
+                target,
+                result,
+                result_gt,
+                result_rpm_icp,
+                vis1,
+                vis2,
+                args.mesh,
+                args,
+                i,
             )
 
     results = {"RPMNet": rpm_stats, "RPMNet_ICP": rpm_icp_stats}
-    with open("results/"+args.save_stats + ".json", "w") as fp:
+    with open("results/" + args.save_stats + ".json", "w") as fp:
         json.dump(results, fp)
 
     return pred_transforms_all, endpoints_out
 
 
 def draw_registration_result(
-    source, target, result, result_gt, result_rpm_icp, vis1, vis2, mesh=False, args=None, i=0
+    source,
+    target,
+    result,
+    result_gt,
+    result_rpm_icp,
+    vis1,
+    vis2,
+    mesh=False,
+    args=None,
+    i=0,
 ):
 
     source.paint_uniform_color([1, 0, 1])
@@ -282,12 +311,20 @@ def draw_registration_result(
         count += 1
 
     if args.save_mesh:
-        vis1.capture_depth_point_cloud("results_mesh/" + "_rpmnet" + str(i) + ".ply", do_render=True)
-        vis2.capture_depth_point_cloud("results_mesh/" + "_rpmnet_icp" + str(i) + ".ply", do_render=True)
+        vis1.capture_depth_point_cloud(
+            "results_mesh/" + "_rpmnet" + str(i) + ".ply", do_render=True
+        )
+        vis2.capture_depth_point_cloud(
+            "results_mesh/" + "_rpmnet_icp" + str(i) + ".ply", do_render=True
+        )
 
     if args.capture_rgb:
-        vis1.capture_screen_image("results_rgb/" + "_rpmnet" + str(i) + ".png", do_render=True)
-        vis2.capture_screen_image("results_rgb/" + "_rpmnet_icp" + str(i) + ".png", do_render=True)
+        vis1.capture_screen_image(
+            "results_rgb/" + "_rpmnet" + str(i) + ".png", do_render=True
+        )
+        vis2.capture_screen_image(
+            "results_rgb/" + "_rpmnet_icp" + str(i) + ".png", do_render=True
+        )
 
     vis1.clear_geometries()
     vis2.clear_geometries()
