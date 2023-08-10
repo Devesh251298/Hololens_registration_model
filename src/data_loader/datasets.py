@@ -56,7 +56,7 @@ def get_source(filename: str, type: str = "source", args=None):
 
     source = copy.deepcopy(pcd)
     if np.asarray(source.colors).shape[0] == 0:
-        source.colors = o3d.utility.Vector3dVector(np.zeros(np.asarray(source.points).shape))
+        source.colors = o3d.utility.Vector3dVector(np.random.rand(*np.asarray(source.points).shape))
     source.remove_non_finite_points()
 
     source_points = np.asarray(source.points)
