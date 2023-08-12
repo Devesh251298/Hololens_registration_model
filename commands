@@ -1,3 +1,5 @@
 python eval.py 
 
 python train.py
+
+python eval.py --object_file STL/Segmentation_skin70.stl  --target_file STL/hololens_mesh.ply --num_point 12000 --visualize True --resume models/model-new_best.pth --num_planes 0 --save_mesh True --capture_rgb True 
