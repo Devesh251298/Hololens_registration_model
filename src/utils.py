@@ -142,7 +142,6 @@ def inference(model: torch.nn.Module, args):
     """Runs inference over entire dataset
 
     Args:
-        data_loader (torch.utils.data.DataLoader): Dataset loader
         model (model.nn.Module): Network model to evaluate
 
     Returns:
