@@ -52,7 +52,7 @@ def get_source(filename: str, type: str = "source", args=None):
         if type == "target":
             pcd = pcd.uniform_down_sample(every_k_points=2)
         else:
-            pcd = pcd.uniform_down_sample(every_k_points=200)
+            pcd = pcd.uniform_down_sample(every_k_points=2)
 
     source = copy.deepcopy(pcd)
     if np.asarray(source.colors).shape[0] == 0:

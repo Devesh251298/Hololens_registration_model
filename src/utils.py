@@ -271,6 +271,14 @@ def draw_registration_result(
     result.paint_uniform_color([1, 0, 0])
     result_rpm_icp.paint_uniform_color([1, 0, 0])
 
+    # scale = 1000
+    # source.scale(scale, center=source.get_center())
+    # target.scale(scale, center=target.get_center())
+    # result.scale(scale, center=result.get_center())
+    # result_gt.scale(scale, center=result_gt.get_center())
+    # result_rpm_icp.scale(scale, center=result_rpm_icp.get_center())
+
+
     if mesh:
         result = get_mesh(result)
         result_gt = get_mesh(result_gt)
@@ -460,11 +468,16 @@ def train(args, device, logger, log_path):
     model.train()
 
     source = get_source(args.object_file, "source", args)
-    target = get_source(args.object_file, "target", args)
+    target = get_source(args.target_file, "target", args)
+
+    source_global = copy.deepcopy(source)
+    target_global = copy.deepcopy(target)
 
     for epoch in range(0, args.epochs):
         tbar = tqdm(total=args.iterations, ncols=args.iterations)
         for i in range(args.iterations):
+            source = copy.deepcopy(source_global)
+            target = copy.deepcopy(target_global)
             train_data = generate_data(source, target, args)
 
             global_step += 1

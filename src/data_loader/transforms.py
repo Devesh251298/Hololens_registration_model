@@ -325,7 +325,7 @@ class ShufflePoints:
                 sphere = np.zeros((0, 3))
 
                 for i in range(num_spheres):
-                    sphere = np.concatenate((sphere, uniform_2_sphere(100, 0.5, np.random.uniform(-2, 2, 3))), axis=0)
+                    sphere = np.concatenate((sphere, uniform_2_sphere(100, 0.5, np.random.uniform(-200, 200, 3))), axis=0)
 
                 sphere = np.concatenate((sphere, sphere[:, :3]), axis=1)
                 sphere = sphere.astype(sample['points_ref'].dtype)
@@ -341,8 +341,11 @@ class ShufflePoints:
             plane = np.concatenate((plane, create_3d_plane(normal, center_global, 1000)), axis=0)
 
         plane = np.concatenate((plane, plane[:, :3]), axis=1)
+
+        color = np.random.rand(plane.shape[0], 3)
+        plane = np.concatenate((plane, color), axis=1)
         plane = plane.astype(sample['points_ref'].dtype)
-        # sample['points_ref'] = np.concatenate((sample['points_ref'], plane), axis=0)
+        sample['points_ref'] = np.concatenate((sample['points_ref'], plane), axis=0)
 
         return sample
 

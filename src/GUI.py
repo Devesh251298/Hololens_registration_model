@@ -73,7 +73,7 @@ while True:
                 "--capture_rgb", str(values["capture_rgb"]),
                 "--simulated", str(values["simulated"]),
             ]
-        
+
         try:
             subprocess.run(cmd, check=True)
             sg.popup("Execution completed successfully!", title="Success")
