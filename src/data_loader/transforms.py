@@ -328,6 +328,8 @@ class ShufflePoints:
                     sphere = np.concatenate((sphere, uniform_2_sphere(100, 0.5, np.random.uniform(-200, 200, 3))), axis=0)
 
                 sphere = np.concatenate((sphere, sphere[:, :3]), axis=1)
+                color = np.random.rand(sphere.shape[0], 3)
+                sphere = np.concatenate((sphere, color), axis=1)
                 sphere = sphere.astype(sample['points_ref'].dtype)
                 sample['points_ref'] = np.concatenate((sample['points_ref'], sphere), axis=0)
 
