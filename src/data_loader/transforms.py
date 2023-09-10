@@ -321,11 +321,11 @@ class ShufflePoints:
 
         if self.args is not None:
             if self.args.noise:
-                num_spheres = np.random.randint(0, self.args.num_spheres)
+                num_spheres = 3
                 sphere = np.zeros((0, 3))
 
                 for i in range(num_spheres):
-                    sphere = np.concatenate((sphere, uniform_2_sphere(100, 0.5, np.random.uniform(-200, 200, 3))), axis=0)
+                    sphere = np.concatenate((sphere, uniform_2_sphere(100, 100, np.random.uniform(-1, 0, 3))), axis=0)
 
                 sphere = np.concatenate((sphere, sphere[:, :3]), axis=1)
                 color = np.random.rand(sphere.shape[0], 3)
@@ -339,6 +339,9 @@ class ShufflePoints:
         global center_global
         normal = plane_global
 
+        if center_global == []:
+            return sample
+        
         for i in range(num_planes):
             plane = np.concatenate((plane, create_3d_plane(normal, center_global, 1000)), axis=0)
 

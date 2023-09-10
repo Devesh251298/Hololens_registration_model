@@ -55,7 +55,7 @@ def uniform_2_plane(num: int = None, width: float = 1.0, height: float = 1.0, ce
 
     return np.stack((x+center[0], y+center[1], z), axis=-1)
 
-def create_3d_plane(normal_vector, point_on_plane, n, width = 1, height = 1):
+def create_3d_plane(normal_vector, point_on_plane, n, width = 300, height = 300):
     # Normalize the normal vector to ensure its length is 1
     normal_vector = np.array(normal_vector) / np.linalg.norm(normal_vector)
     

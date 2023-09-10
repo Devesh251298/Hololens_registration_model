@@ -8,7 +8,7 @@ import copy
 if __name__ == "__main__":
 
     print("Load a ply point cloud, print it, and render it")
-    mesh = o3d.io.read_triangle_mesh("STL/hololens.ply")
+    mesh = o3d.io.read_triangle_mesh("STL/skull.stl")
     vertices = np.asarray(mesh.vertices)
 
     scale_factor = 0.001

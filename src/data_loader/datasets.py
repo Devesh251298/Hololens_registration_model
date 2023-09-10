@@ -78,7 +78,8 @@ def generate_data(source, target, args):
     rot_mag = np.random.uniform(0, args.rot_mag)
     trans_mag = np.random.uniform(0, args.trans_mag)
     num_points = args.num_points
-    partial_p_keep = [1, np.random.uniform(args.partial_min, 1)]
+    prob = np.random.uniform(args.partial_min, 1)
+    partial_p_keep = [1, np.random.uniform(prob, 1)]
     # print(np.asarray(source.points).shape, np.asarray(source.normals).shape)
     # print(np.asarray(target.points).shape, np.asarray(target.normals).shape)
     sample = {'points': np.concatenate((np.asarray(source.points), np.asarray(source.normals), np.asarray(source.colors)), axis=1), 'label': 'Actual', 'idx': 4, 'category': 'patient'}
@@ -87,7 +88,7 @@ def generate_data(source, target, args):
     # if args.simulated:
     transforms1 = torchvision.transforms.Compose([
                                                     Transforms.SplitSourceRef(),
-                                                    Transforms.RandomCrop([0.3]),
+                                                    Transforms.RandomCrop([0.6]),
                                                     Transforms.RandomTransformSE3_euler(rot_mag=rot_mag, trans_mag=trans_mag),
                                                     Transforms.Resampler(num_points),
                                                     Transforms.RandomJitter(),

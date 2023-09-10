@@ -11,7 +11,7 @@ layout = [
     [sg.Radio("Evaluate", "mode", default=True, key="mode_eval"), sg.Radio("Train", "mode", key="mode_train")],
     [sg.Text("Input STL File"), sg.InputText(key="input_file", default_text="STL/Segmentation_skin.stl"), sg.FileBrowse()],
     [sg.Text("Input Target File"), sg.InputText(key="target_file", default_text="STL/hololens_mesh.ply"), sg.FileBrowse()],
-    [sg.Text("Number of Points"), sg.InputText(key="num_points", default_text="12000")],
+    [sg.Text("Number of Points"), sg.InputText(key="num_points", default_text="2000")],
     [sg.Text("Rotation Magnitude"), sg.InputText(key="rot_mag", default_text="30")],
     [sg.Text("Translation Magnitude"), sg.InputText(key="trans_mag", default_text="0.5")],
     [sg.Text("Visibility"), sg.InputText(key="partial_min", default_text="0.5")],
@@ -23,6 +23,19 @@ layout = [
     [sg.Checkbox("Save Mesh", default=True, key="save_mesh")],
     [sg.Checkbox("Capture RGB", default=True, key="capture_rgb")],
     [sg.Checkbox("Simulated", default=True, key="simulated")],
+    [sg.Button("Show STL"), sg.Button("Show Target"), sg.Button("Run"), sg.Button("Exit")]
+    ]
+train_layout = [
+    [sg.Radio("Evaluate", "mode", default=True, key="mode_eval"), sg.Radio("Train", "mode", key="mode_train")],
+    [sg.Text("Input STL File"), sg.InputText(key="input_file", default_text="STL/Segmentation_skin.stl"), sg.FileBrowse()],
+    [sg.Text("Number of Points"), sg.InputText(key="num_points", default_text="2000")],
+    [sg.Text("Rotation Magnitude"), sg.InputText(key="rot_mag", default_text="30")],
+    [sg.Text("Translation Magnitude"), sg.InputText(key="trans_mag", default_text="0.5")],
+    [sg.Text("Visibility"), sg.InputText(key="partial_min", default_text="0.5")],
+    [sg.Checkbox("Noise", default=False, key="noise")],
+    [sg.Text("Number of Spheres"), sg.InputText(key="num_spheres", default_text="2")],
+    [sg.Text("Number of Iterations"), sg.InputText(key="num_reg_iter", default_text="5")],
+    [sg.Text("Model Path"), sg.InputText(key="model_path", default_text="models/model-new_best.pth"), sg.FileBrowse()],
     [sg.Button("Show STL"), sg.Button("Show Target"), sg.Button("Run"), sg.Button("Exit")]
     ]
 

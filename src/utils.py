@@ -251,6 +251,92 @@ def inference(model: torch.nn.Module, args):
 
     return pred_transforms_all, endpoints_out
 
+def draw_registration_result_save(
+    source,
+    target,
+    result,
+    result_gt,
+    result_rpm_icp,
+    vis1,
+    vis2,
+    mesh=False,
+    args=None,
+    i=0,
+):
+    source.paint_uniform_color([1, 0, 0])
+    target.paint_uniform_color([0, 0, 1])
+    result.paint_uniform_color([0, 1, 0])
+
+
+    vis1.add_geometry(result)
+    # vis1.add_geometry(result_gt)
+    vis1.add_geometry(source)
+    vis1.add_geometry(target)
+
+    vis2.add_geometry(source)
+
+    vis3 = o3.visualization.Visualizer()
+    vis3.create_window(window_name="Target", width=960, height=540, left=0, top=0)
+
+    vis4 = o3.visualization.Visualizer()
+    vis4.create_window(
+        window_name="Registered", width=960, height=540, left=0, top=600
+    )
+
+    vis3.add_geometry(target)
+    vis4.add_geometry(result)
+
+    count = 0
+    while count < 10:
+        vis1.update_geometry(result)
+        # vis1.update_geometry(result_gt)
+        vis1.update_geometry(source)
+        vis1.update_geometry(target)
+
+        vis3.add_geometry(target)
+        vis4.add_geometry(result)
+
+        if not vis1.poll_events():
+            break
+        vis1.update_renderer()
+
+        if not vis3.poll_events():
+            break
+        vis3.update_renderer()
+
+        if not vis4.poll_events():
+            break
+        vis4.update_renderer()
+
+        count += 1
+    
+    if args.save_mesh:
+        # vis1.capture_depth_point_cloud(
+        #     "results_mesh/" + "_rpmnet" + str(i) + ".ply", do_render=True
+        # )
+
+        # vis2.capture_depth_point_cloud(
+        #     "results_mesh/" + "_source_mesh" + str(i) + ".ply", do_render=True
+        # )
+        # vis3.capture_depth_point_cloud(
+        #     "results_mesh/" + "_target_mesh" + str(i) + ".ply", do_render=True
+        # )
+        # vis4.capture_depth_point_cloud(
+        #     "results_mesh/" + "_registered_mesh" + str(i) + ".ply", do_render=True
+        # )
+        o3.io.write_point_cloud(
+            "results_mesh/" + "_source_mesh_main_pre2" + str(i) + ".ply", source
+        )
+        o3.io.write_point_cloud(
+            "results_mesh/" + "_target_mesh_main_pre2" + str(i) + ".ply", target
+        )
+        o3.io.write_point_cloud(
+            "results_mesh/" + "_registered_mesh_main_pre2" + str(i) + ".ply", result
+        )
+    vis1.clear_geometries()
+    vis2.clear_geometries()
+    vis3.clear_geometries()
+    vis4.clear_geometries()
 
 def draw_registration_result(
     source,
@@ -265,11 +351,11 @@ def draw_registration_result(
     i=0,
 ):
 
-    source.paint_uniform_color([1, 0, 1])
-    # target.paint_uniform_color([0, 1, 0])
-    result_gt.paint_uniform_color([0, 0, 1])
-    result.paint_uniform_color([1, 0, 0])
-    result_rpm_icp.paint_uniform_color([1, 0, 0])
+    source.paint_uniform_color([1, 0, 0])
+    target.paint_uniform_color([0, 0, 1])
+    # result_gt.paint_uniform_color([0, 0, 1])
+    result.paint_uniform_color([0, 1, 0])
+    result_rpm_icp.paint_uniform_color([0, 1, 0])
 
     # scale = 1000
     # source.scale(scale, center=source.get_center())
@@ -279,10 +365,10 @@ def draw_registration_result(
     # result_rpm_icp.scale(scale, center=result_rpm_icp.get_center())
 
 
-    if mesh:
+    if mesh: 
         result = get_mesh(result)
-        result_gt = get_mesh(result_gt)
-        result_rpm_icp = get_mesh(result_rpm_icp)
+        # result_gt = get_mesh(result_gt)
+        # result_rpm_icp = get_mesh(result_rpm_icp)
         source = get_mesh(source)
         target = get_mesh(target)
 
@@ -298,7 +384,7 @@ def draw_registration_result(
 
     count = 0
     while count < 2000:
-        # vis1.update_geometry(result)
+        vis1.update_geometry(result)
         # vis1.update_geometry(result_gt)
         vis1.update_geometry(source)
         vis1.update_geometry(target)
@@ -307,7 +393,7 @@ def draw_registration_result(
             break
         vis1.update_renderer()
 
-        # vis2.update_geometry(result)
+        vis2.update_geometry(result)
         # vis2.update_geometry(result_gt)
         vis2.update_geometry(source)
         vis2.update_geometry(target)
@@ -319,18 +405,18 @@ def draw_registration_result(
 
     if args.save_mesh:
         vis1.capture_depth_point_cloud(
-            "results_mesh/" + "_rpmnet2" + str(i) + ".ply", do_render=True
+            "results_mesh/" + "_rpmnet3" + str(i) + ".ply", do_render=True
         )
         vis2.capture_depth_point_cloud(
-            "results_mesh/" + "_rpmnet_icp2" + str(i) + ".ply", do_render=True
+            "results_mesh/" + "_rpmnet_icp3" + str(i) + ".ply", do_render=True
         )
 
     if args.capture_rgb:
         vis1.capture_screen_image(
-            "results_rgb/" + "_rpmnet2" + str(i) + ".png", do_render=True
+            "results_rgb/" + "_rpmnet5" + str(i) + ".png", do_render=True
         )
         vis2.capture_screen_image(
-            "results_rgb/" + "_rpmnet_icp2" + str(i) + ".png", do_render=True
+            "results_rgb/" + "_rpmnet_icp5" + str(i) + ".png", do_render=True
         )
 
     vis1.clear_geometries()
